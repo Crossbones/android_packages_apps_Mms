@@ -33,6 +33,8 @@ import android.provider.Telephony.Sms;
 import android.telephony.SmsMessage;
 import android.util.Log;
 
+import java.util.ArrayList;
+
 public class SmsMessageSender implements MessageSender {
     protected final Context mContext;
     protected final int mNumberOfDests;
