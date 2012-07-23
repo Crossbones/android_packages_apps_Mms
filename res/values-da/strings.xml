@@ -34,6 +34,7 @@
     <string name="menu_view" msgid="7448852683948080108">"Vis tråd"</string>
     <string name="menu_debug_dump" msgid="6855869130206549643">"FEJLFINDING AF DUMP"</string>
     <string name="refreshing" msgid="987335057871404222">"Opdaterer ..."</string>
+    <string name="menu_cell_broadcasts" msgid="5646161375983084660">"Mobilmeddelelser"</string>
     <string name="has_draft" msgid="2487465595514636160">"Kladde"</string>
     <string name="no_subject_view" msgid="7795086723069563537">"(Intet emne)"</string>
     <string name="messagelist_sender_self" msgid="3579016854116401602">"Mig"</string>
@@ -55,7 +56,7 @@
     <string name="insufficient_drm_rights" msgid="6989074725969164383">"Der er ikke fundet tilstrækkelige DRM-rettigheder."</string>
     <string name="copy_message_text" msgid="4296252229544252834">"Kopier tekst"</string>
     <string name="message_options" msgid="6838806653341967550">"Indstillinger for beskeder"</string>
-    <string name="done" msgid="7479926268660505871">"Udfør"</string>
+    <string name="done" msgid="7479926268660505871">"Færdig"</string>
     <string name="move_up" msgid="7307578107431739359">"Flyt op"</string>
     <string name="move_down" msgid="6356509518429479053">"Flyt ned"</string>
     <string name="remove_slide" msgid="2225604354024914900">"Fjern dias"</string>
@@ -92,7 +93,6 @@
     <string name="failed_to_resize_image" msgid="5608354151631833669">"Billedets størrelse blev ikke redigeret."</string>
     <string name="resize_image_error_information" msgid="3783200130776554475">"Dette billede er for stort til at sende, selv når det skaleres."</string>
     <string name="forward_prefix" msgid="276280492803486464">"VS: "</string>
-    <string name="discard_message" msgid="6078326880056142781">"Kassér"</string>
     <string name="discard_message_reason" msgid="2667664943003796133">"Din besked kasseres, fordi den ikke har nogen gyldige modtagere."</string>
     <string name="has_invalid_recipient" msgid="1485388396900997383">"Ugyldig(e) modtager(e): &lt;<xliff:g id="NAME">%1$s</xliff:g>&gt;"</string>
     <string name="invalid_destination" msgid="4573835601024786416">"Ugyldig destinationsadresse."</string>
@@ -113,6 +113,7 @@
     <string name="too_many_attachments" msgid="3774037894899750070">"Der er en grænse på <xliff:g id="MAXLIMIT">%1$s</xliff:g> vedhæftede filer. Kun de første <xliff:g id="CURRENTCOUNT">%2$s</xliff:g> tilføjes."</string>
     <string name="adding_attachments_title" msgid="2034535554212405529">"Tilføjer vedhæftede filer"</string>
     <string name="adding_attachments" msgid="5871373105122355632">"Vent, mens elementerne føjes til diasshowet."</string>
+    <string name="building_slideshow_title" msgid="1232338692400726385">"Opretter diasshow"</string>
     <string name="cannot_play_audio" msgid="253920977253666735">"Lyden kan ikke afspilles."</string>
     <string name="preview" msgid="5438149136136446756">"Vis eksempel"</string>
     <string name="preview_slideshow" msgid="6824095909448728427">"Vis eksempel"</string>
@@ -199,6 +200,7 @@
     <string name="delete" msgid="1409973060081564612">"Slet"</string>
     <string name="select_conversations" msgid="7816517565640002844">"Markér samtaler"</string>
     <string name="no_conversations" msgid="6773767655149258445">"Der er ingen samtaler."</string>
+    <string name="loading_conversations" msgid="5510430408235967094">"Indlæser samtaler."</string>
     <string name="cannot_get_details" msgid="850292987983026806">"Detaljerne kan ikke hentes."</string>
     <string name="message_details_title" msgid="9223295113731634528">"Beskeddetaljer"</string>
     <string name="message_type_label" msgid="7975373966795945566">"Type: "</string>
@@ -239,6 +241,7 @@
     <string name="status_rejected" msgid="2613641949065942678">"Afvist"</string>
     <string name="recipient_label" msgid="3922667485312634446">"Modtager: "</string>
     <string name="status_label" msgid="7283375460919181660">"Status: "</string>
+    <string name="delivered_label" msgid="3514011729156932928">"Afleveret: "</string>
     <string name="attach_image" msgid="6439985727687107742">"Billeder"</string>
     <string name="attach_take_photo" msgid="4280601313184373837">"Tag billede"</string>
     <string name="attach_video" msgid="4264272693501538294">"Videoer"</string>
@@ -309,7 +312,7 @@
     <string name="search_history" msgid="4127805495662693154">"<xliff:g id="COUNT">%1$s</xliff:g> resultater for \"<xliff:g id="SEARCH">%2$s</xliff:g>\""</string>
     <string name="confirm_clear_search_title" msgid="8510295993632032904">"Ryd"</string>
     <string name="confirm_clear_search_text" msgid="8731877031837077478">"Søgeoversigten ryddes."</string>
-    <string name="pref_mms_clear_search_history_title" msgid="6159758850628148164">"Ryd søgeoversigt"</string>
+    <string name="pref_mms_clear_search_history_title" msgid="6159758850628148164">"Ryd søgehistorik"</string>
     <string name="pref_mms_clear_search_history_summary" msgid="7960005384066460035">"Ryd tidligere søgninger i Beskeder, så de ikke vises i søgefeltet"</string>
     <string name="save" msgid="6847069284991531310">"Gem"</string>
     <string name="storage_limits_title" msgid="7074684882530693016">"Begræns beskeder"</string>
@@ -322,10 +325,22 @@
     <string name="adding_recipients" msgid="2962810172527532357">"Tilføjer modtagere…"</string>
     <string name="draft_separator" msgid="5402575086540243019">", "</string>
     <string name="message_count_format" msgid="4434763220590778012">" <xliff:g id="NUMBER">%1$s</xliff:g>"</string>
+    <string name="message_count_notification" msgid="3629968600032690007">"<xliff:g id="NUMBER">%1$s</xliff:g> nye beskeder"</string>
+  <plurals name="message_count_notification_overflow">
+    <item quantity="one" msgid="3340591167508150806">"+ <xliff:g id="NUMBER">%1$s</xliff:g> anden besked"</item>
+    <item quantity="other" msgid="1393002799298501480">"+ <xliff:g id="NUMBER">%1$s</xliff:g> andre beskeder"</item>
+  </plurals>
     <string name="error_state" msgid="5177386717626893507">"Svingende tilstand"</string>
     <string name="error_state_text" msgid="7918866106335387710">"Tilstanden af tråde og modtagere er svingende. Opret en fejlrapport, og send den via http://go/droidanizer"</string>
   <plurals name="recipient_count">
     <item quantity="other" msgid="7338580381574463136">"<xliff:g id="NUMBER">%1$s</xliff:g> personer"</item>
   </plurals>
     <string name="disable_notifications_dialog_message" msgid="7644011234972074096">"Vil du stoppe dobbelte underretninger via sms fra standardappen Meddelelser?"</string>
+    <string name="view_more_conversations" msgid="7275920132410734671">"Få vist flere samtaler"</string>
+    <string name="attachment_audio" msgid="2867960243300539143">"Lyd"</string>
+    <string name="attachment_slideshow" msgid="5867689101881763318">"Diasshow"</string>
+    <string name="attachment_video" msgid="4252062022156694591">"Video"</string>
+    <string name="attachment_picture" msgid="3709286281567284296">"Billede"</string>
+    <string name="notification_separator" msgid="2334673105226536422">"  "</string>
+    <string name="enumeration_comma" msgid="213598026698964628">", "</string>
 </resources>

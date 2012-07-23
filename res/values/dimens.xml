@@ -10,4 +10,11 @@ All Rights Reserved. -->
 
     <dimen name="input_text_height">48dip</dimen>
     <dimen name="input_text_height_adjusted">8dip</dimen>
+
+    <dimen name="mms_inline_attachment_size">178dip</dimen>
+
+    <dimen name="widget_margin_top">0dip</dimen>
+    <dimen name="widget_margin_left">0dip</dimen>
+    <dimen name="widget_margin_right">0dip</dimen>
+    <dimen name="widget_margin_bottom">0dip</dimen>
 </resources>

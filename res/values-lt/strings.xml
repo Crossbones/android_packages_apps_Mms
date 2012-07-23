@@ -34,6 +34,7 @@
     <string name="menu_view" msgid="7448852683948080108">"Žiūrėti giją"</string>
     <string name="menu_debug_dump" msgid="6855869130206549643">"DEBUG DUMP"</string>
     <string name="refreshing" msgid="987335057871404222">"Atnaujinama..."</string>
+    <string name="menu_cell_broadcasts" msgid="5646161375983084660">"Tinklo transliacijos"</string>
     <string name="has_draft" msgid="2487465595514636160">"Juodraštis"</string>
     <string name="no_subject_view" msgid="7795086723069563537">"(nėra temos)"</string>
     <string name="messagelist_sender_self" msgid="3579016854116401602">"Aš"</string>
@@ -92,7 +93,6 @@
     <string name="failed_to_resize_image" msgid="5608354151631833669">"Paveikslėlio dydis nepakeistas."</string>
     <string name="resize_image_error_information" msgid="3783200130776554475">"Šis paveikslėlis per didelis siųsti net pakeitus jo dydį."</string>
     <string name="forward_prefix" msgid="276280492803486464">"Prs.: "</string>
-    <string name="discard_message" msgid="6078326880056142781">"Atmesti"</string>
     <string name="discard_message_reason" msgid="2667664943003796133">"Pranešimas bus atmestas, nes nėra tinkamų jo gavėjų."</string>
     <string name="has_invalid_recipient" msgid="1485388396900997383">"Neteisingas (-i) gavėjas (-i): &lt;<xliff:g id="NAME">%1$s</xliff:g>&gt;"</string>
     <string name="invalid_destination" msgid="4573835601024786416">"Netinkamas paskirties vietos adresas."</string>
@@ -113,6 +113,7 @@
     <string name="too_many_attachments" msgid="3774037894899750070">"Priedų skaičius apribotas iki <xliff:g id="MAXLIMIT">%1$s</xliff:g>. Bus pridėti (-a) tik <xliff:g id="CURRENTCOUNT">%2$s</xliff:g> pirmi (-ų)."</string>
     <string name="adding_attachments_title" msgid="2034535554212405529">"Pridedami priedai"</string>
     <string name="adding_attachments" msgid="5871373105122355632">"Palaukite, kol prie skaidrių demonstracijos bus pridėta elementų."</string>
+    <string name="building_slideshow_title" msgid="1232338692400726385">"Kuriama skaidrių demonstracija"</string>
     <string name="cannot_play_audio" msgid="253920977253666735">"Negalima leisti garso įrašo."</string>
     <string name="preview" msgid="5438149136136446756">"Peržiūra"</string>
     <string name="preview_slideshow" msgid="6824095909448728427">"Peržiūra"</string>
@@ -199,6 +200,7 @@
     <string name="delete" msgid="1409973060081564612">"Ištrinti"</string>
     <string name="select_conversations" msgid="7816517565640002844">"Pasirinkti pokalbius"</string>
     <string name="no_conversations" msgid="6773767655149258445">"Nėra pokalbių."</string>
+    <string name="loading_conversations" msgid="5510430408235967094">"Įkeliami pokalbiai."</string>
     <string name="cannot_get_details" msgid="850292987983026806">"Negalima gauti išsamios informacijos."</string>
     <string name="message_details_title" msgid="9223295113731634528">"Išsami pranešimo informacija"</string>
     <string name="message_type_label" msgid="7975373966795945566">"Tipas: "</string>
@@ -239,6 +241,7 @@
     <string name="status_rejected" msgid="2613641949065942678">"Atmesta"</string>
     <string name="recipient_label" msgid="3922667485312634446">"Gavėjas: "</string>
     <string name="status_label" msgid="7283375460919181660">"Būsena: "</string>
+    <string name="delivered_label" msgid="3514011729156932928">"Pristatyta: "</string>
     <string name="attach_image" msgid="6439985727687107742">"Paveikslėliai"</string>
     <string name="attach_take_photo" msgid="4280601313184373837">"Fiksuoti paveikslėlį"</string>
     <string name="attach_video" msgid="4264272693501538294">"Vaizdo įrašai"</string>
@@ -322,10 +325,22 @@
     <string name="adding_recipients" msgid="2962810172527532357">"Pridedama gavėjų..."</string>
     <string name="draft_separator" msgid="5402575086540243019">", "</string>
     <string name="message_count_format" msgid="4434763220590778012">" <xliff:g id="NUMBER">%1$s</xliff:g>"</string>
+    <string name="message_count_notification" msgid="3629968600032690007">"Naujų pranešimų: <xliff:g id="NUMBER">%1$s</xliff:g>"</string>
+  <plurals name="message_count_notification_overflow">
+    <item quantity="one" msgid="3340591167508150806">"ir dar <xliff:g id="NUMBER">%1$s</xliff:g> praneš."</item>
+    <item quantity="other" msgid="1393002799298501480">"ir dar <xliff:g id="NUMBER">%1$s</xliff:g> praneš."</item>
+  </plurals>
     <string name="error_state" msgid="5177386717626893507">"Nepastovi būsena"</string>
     <string name="error_state_text" msgid="7918866106335387710">"Gijų ir gavėjų būsena nenuosekli. Sukurkite trikčių ataskaitą ir pateikite ją adresu http://go/droidanizer."</string>
   <plurals name="recipient_count">
     <item quantity="other" msgid="7338580381574463136">"<xliff:g id="NUMBER">%1$s</xliff:g> žm."</item>
   </plurals>
     <string name="disable_notifications_dialog_message" msgid="7644011234972074096">"Nebekurti numatytosios „Susirašinėjimo žinutėmis“ programos pranešimų apie teksto žinutes kopijų?"</string>
+    <string name="view_more_conversations" msgid="7275920132410734671">"Peržiūrėti daugiau pokalbių"</string>
+    <string name="attachment_audio" msgid="2867960243300539143">"Garso įrašas"</string>
+    <string name="attachment_slideshow" msgid="5867689101881763318">"Skaidrių demonstracija"</string>
+    <string name="attachment_video" msgid="4252062022156694591">"Vaizdo įrašas"</string>
+    <string name="attachment_picture" msgid="3709286281567284296">"Nuotrauka"</string>
+    <string name="notification_separator" msgid="2334673105226536422">"  "</string>
+    <string name="enumeration_comma" msgid="213598026698964628">", "</string>
 </resources>

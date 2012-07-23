@@ -81,6 +81,7 @@
                   android:configChanges="orientation|screenSize|keyboardHidden"
                   android:windowSoftInputMode="stateHidden"
                   android:theme="@style/MmsHoloTheme"
+                  android:parentActivityName=".ui.ConversationList"
                   android:launchMode="singleTop" >
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -111,18 +112,12 @@
            <intent-filter>
                <action android:name="android.intent.action.SEND" />
                <category android:name="android.intent.category.DEFAULT" />
-               <data android:mimeType="video/*" />
-           </intent-filter>
-           <intent-filter>
-               <action android:name="android.intent.action.SEND" />
-               <category android:name="android.intent.category.DEFAULT" />
                <data android:mimeType="text/plain" />
            </intent-filter>
            <intent-filter>
                <action android:name="android.intent.action.SEND_MULTIPLE" />
                <category android:name="android.intent.category.DEFAULT" />
                <data android:mimeType="image/*" />
-               <data android:mimeType="video/*" />
            </intent-filter>
         </activity>
 
@@ -132,6 +127,14 @@
                   android:windowSoftInputMode="stateHidden"
                   android:theme="@style/MmsHoloTheme" >
         </activity-alias>
+
+        <activity android:name=".ui.ComposeMessageActivityNoLockScreen"
+                  android:configChanges="orientation|screenSize|keyboardHidden"
+                  android:windowSoftInputMode="stateHidden"
+                  android:theme="@style/MmsHoloTheme"
+                  android:exported="false"
+                  android:launchMode="singleTop" >
+        </activity>
 
         <activity android:name=".ui.DeliveryReportActivity"
             android:label="@string/delivery_report_activity"
@@ -196,6 +199,7 @@
         <activity android:name=".ui.ManageSimMessages"
                   android:theme="@style/MmsHoloTheme"
                   android:launchMode="singleTop"
+                  android:configChanges="orientation|screenSize|keyboardHidden"
                   android:label="@string/sim_manage_messages_title">
             <intent-filter>
                 <action android:name="android.intent.action.VIEW" />
@@ -230,6 +234,8 @@
                 <action android:name="com.android.mms.transaction.MessageStatusReceiver.MESSAGE_STATUS_RECEIVED" />
             </intent-filter>
         </receiver>
+
+        <service android:name=".transaction.MessageStatusService"/>
 
         <receiver android:name=".transaction.SimFullReceiver">
             <intent-filter>
@@ -299,6 +305,22 @@
                 <category android:name="android.intent.category.DEFAULT" />
             </intent-filter>
         </activity>
+
+        <!-- Widget -->
+        <receiver android:name=".widget.MmsWidgetProvider"  android:label="@string/app_label">
+            <intent-filter>
+                <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
+            </intent-filter>
+            <intent-filter>
+                <action android:name="com.android.mms.intent.action.ACTION_NOTIFY_DATASET_CHANGED" />
+            </intent-filter>
+            <meta-data android:name="android.appwidget.provider"
+                       android:resource="@xml/widget_info" />
+        </receiver>
+        <service android:name=".widget.MmsWidgetService"
+                 android:permission="android.permission.BIND_REMOTEVIEWS"
+                 android:exported="false" />
+
 
     </application>
 </manifest>

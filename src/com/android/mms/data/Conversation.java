@@ -14,6 +14,7 @@ import android.content.ContentValues;
 import android.content.Context;
 import android.database.Cursor;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.provider.BaseColumns;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.MmsSms;
@@ -26,6 +27,7 @@ import android.text.TextUtils;
 import android.util.Log;
 
 import com.android.mms.LogTag;
+import com.android.mms.MmsApp;
 import com.android.mms.R;
 import com.android.mms.transaction.MessagingNotification;
 import com.android.mms.ui.MessageUtils;
@@ -39,16 +41,16 @@ public class Conversation {
     private static final String TAG = "Mms/conv";
     private static final boolean DEBUG = false;
 
-    private static final Uri sAllThreadsUri =
+    public static final Uri sAllThreadsUri =
         Threads.CONTENT_URI.buildUpon().appendQueryParameter("simple", "true").build();
 
-    private static final String[] ALL_THREADS_PROJECTION = {
+    public static final String[] ALL_THREADS_PROJECTION = {
         Threads._ID, Threads.DATE, Threads.MESSAGE_COUNT, Threads.RECIPIENT_IDS,
         Threads.SNIPPET, Threads.SNIPPET_CHARSET, Threads.READ, Threads.ERROR,
         Threads.HAS_ATTACHMENT
     };
 
-    private static final String[] UNREAD_PROJECTION = {
+    public static final String[] UNREAD_PROJECTION = {
         Threads._ID,
         Threads.READ
     };
@@ -87,10 +89,12 @@ public class Conversation {
     private boolean mIsChecked;         // True if user has selected the conversation for a
                                         // multi-operation such as delete.
 
-    private static ContentValues mReadContentValues;
-    private static boolean mLoadingThreads;
+    private static ContentValues sReadContentValues;
+    private static boolean sLoadingThreads;
+    private static boolean sDeletingThreads;
+    private static Object sDeletingThreadsLock = new Object();
     private boolean mMarkAsReadBlocked;
-    private Object mMarkAsBlockedSyncer = new Object();
+    private boolean mMarkAsReadWaiting;
 
     private Conversation(Context context) {
         mContext = context;
@@ -216,8 +220,9 @@ public class Conversation {
             }
         }
 
-        String recipient = getRecipients(uri);
-        return get(context, ContactList.getByNumbers(recipient,
+        String recipients = PhoneNumberUtils.replaceUnicodeDigits(getRecipients(uri))
+                .replace(',', ';');
+        return get(context, ContactList.getByNumbers(recipients,
                 allowQuery /* don't block */, true /* replace number */), allowQuery);
     }
 
@@ -284,82 +289,93 @@ public class Conversation {
     }
 
     private void buildReadContentValues() {
-        if (mReadContentValues == null) {
-            mReadContentValues = new ContentValues(2);
-            mReadContentValues.put("read", 1);
-            mReadContentValues.put("seen", 1);
+        if (sReadContentValues == null) {
+            sReadContentValues = new ContentValues(2);
+            sReadContentValues.put("read", 1);
+            sReadContentValues.put("seen", 1);
         }
     }
 
     /**
      * Marks all messages in this conversation as read and updates
      * relevant notifications.  This method returns immediately;
-     * work is dispatched to a background thread.
+     * work is dispatched to a background thread. This function should
+     * always be called from the UI thread.
      */
     public void markAsRead() {
-        // If we have no Uri to mark (as in the case of a conversation that
-        // has not yet made its way to disk), there's nothing to do.
+        if (mMarkAsReadWaiting) {
+            // We've already been asked to mark everything as read, but we're blocked.
+            return;
+        }
+        if (mMarkAsReadBlocked) {
+            // We're blocked so record the fact that we want to mark the messages as read
+            // when we get unblocked.
+            mMarkAsReadWaiting = true;
+            return;
+        }
         final Uri threadUri = getUri();
 
-        new Thread(new Runnable() {
-            public void run() {
-                synchronized(mMarkAsBlockedSyncer) {
-                    if (mMarkAsReadBlocked) {
-                        try {
-                            mMarkAsBlockedSyncer.wait();
-                        } catch (InterruptedException e) {
-                        }
-                    }
-
-                    if (threadUri != null) {
-                        buildReadContentValues();
-
-                        // Check the read flag first. It's much faster to do a query than
-                        // to do an update. Timing this function show it's about 10x faster to
-                        // do the query compared to the update, even when there's nothing to
-                        // update.
-                        boolean needUpdate = true;
-
-                        Cursor c = mContext.getContentResolver().query(threadUri,
-                                UNREAD_PROJECTION, UNREAD_SELECTION, null, null);
-                        if (c != null) {
-                            try {
-                                needUpdate = c.getCount() > 0;
-                            } finally {
-                                c.close();
-                            }
-                        }
-
-                        if (needUpdate) {
-                            LogTag.debug("markAsRead: update read/seen for thread uri: " +
-                                    threadUri);
-                            mContext.getContentResolver().update(threadUri, mReadContentValues,
-                                    UNREAD_SELECTION, null);
-                        }
-
-                        setHasUnreadMessages(false);
-                    }
+        new AsyncTask<Void, Void, Void>() {
+            protected Void doInBackground(Void... none) {
+                if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                    LogTag.debug("markAsRead");
                 }
+                // If we have no Uri to mark (as in the case of a conversation that
+                // has not yet made its way to disk), there's nothing to do.
+                if (threadUri != null) {
+                    buildReadContentValues();
 
+                    // Check the read flag first. It's much faster to do a query than
+                    // to do an update. Timing this function show it's about 10x faster to
+                    // do the query compared to the update, even when there's nothing to
+                    // update.
+                    boolean needUpdate = true;
+
+                    Cursor c = mContext.getContentResolver().query(threadUri,
+                            UNREAD_PROJECTION, UNREAD_SELECTION, null, null);
+                    if (c != null) {
+                        try {
+                            needUpdate = c.getCount() > 0;
+                        } finally {
+                            c.close();
+                        }
+                    }
+
+                    if (needUpdate) {
+                        LogTag.debug("markAsRead: update read/seen for thread uri: " +
+                                threadUri);
+                        mContext.getContentResolver().update(threadUri, sReadContentValues,
+                                UNREAD_SELECTION, null);
+                    }
+                    setHasUnreadMessages(false);
+                }
                 // Always update notifications regardless of the read state.
                 MessagingNotification.blockingUpdateAllNotifications(mContext);
+
+                return null;
             }
-        }).start();
+        }.execute();
     }
 
+    /**
+     * Call this with false to prevent marking messages as read. The code calls this so
+     * the DB queries in markAsRead don't slow down the main query for messages. Once we've
+     * queried for all the messages (see ComposeMessageActivity.onQueryComplete), then we
+     * can mark messages as read. Only call this function on the UI thread.
+     */
     public void blockMarkAsRead(boolean block) {
         if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
             LogTag.debug("blockMarkAsRead: " + block);
         }
 
-        synchronized(mMarkAsBlockedSyncer) {
-            if (block != mMarkAsReadBlocked) {
-                mMarkAsReadBlocked = block;
-                if (!mMarkAsReadBlocked) {
-                    mMarkAsBlockedSyncer.notifyAll();
+        if (block != mMarkAsReadBlocked) {
+            mMarkAsReadBlocked = block;
+            if (!mMarkAsReadBlocked) {
+                if (mMarkAsReadWaiting) {
+                    mMarkAsReadWaiting = false;
+                    markAsRead();
                 }
             }
-
         }
     }
 
@@ -550,13 +566,55 @@ public class Conversation {
                 recipients.add(c.getNumber());
             }
         }
-        long retVal = Threads.getOrCreateThreadId(context, recipients);
-        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-            LogTag.debug("[Conversation] getOrCreateThreadId for (%s) returned %d",
-                    recipients, retVal);
+        synchronized(sDeletingThreadsLock) {
+            long now = System.currentTimeMillis();
+            while (sDeletingThreads) {
+                try {
+                    sDeletingThreadsLock.wait(30000);
+                } catch (InterruptedException e) {
+                }
+                if (System.currentTimeMillis() - now > 29000) {
+                    // The deleting thread task is stuck or onDeleteComplete wasn't called.
+                    // Unjam ourselves.
+                    Log.e(TAG, "getOrCreateThreadId timed out waiting for delete to complete",
+                            new Exception());
+                    sDeletingThreads = false;
+                    break;
+                }
+            }
+            long retVal = Threads.getOrCreateThreadId(context, recipients);
+            if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                LogTag.debug("[Conversation] getOrCreateThreadId for (%s) returned %d",
+                        recipients, retVal);
+            }
+            return retVal;
         }
+    }
 
-        return retVal;
+    public static long getOrCreateThreadId(Context context, String address) {
+        synchronized(sDeletingThreadsLock) {
+            long now = System.currentTimeMillis();
+            while (sDeletingThreads) {
+                try {
+                    sDeletingThreadsLock.wait(30000);
+                } catch (InterruptedException e) {
+                }
+                if (System.currentTimeMillis() - now > 29000) {
+                    // The deleting thread task is stuck or onDeleteComplete wasn't called.
+                    // Unjam ourselves.
+                    Log.e(TAG, "getOrCreateThreadId timed out waiting for delete to complete",
+                            new Exception());
+                    sDeletingThreads = false;
+                    break;
+                }
+            }
+            long retVal = Threads.getOrCreateThreadId(context, address);
+            if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                LogTag.debug("[Conversation] getOrCreateThreadId for (%s) returned %d",
+                        address, retVal);
+            }
+            return retVal;
+        }
     }
 
     /*
@@ -641,12 +699,28 @@ public class Conversation {
      * @param deleteAll Delete the whole thread including locked messages
      * @param threadId Thread ID of the conversation to be deleted
      */
-    public static void startDelete(AsyncQueryHandler handler, int token, boolean deleteAll,
+    public static void startDelete(ConversationQueryHandler handler, int token, boolean deleteAll,
             long threadId) {
-        Uri uri = ContentUris.withAppendedId(Threads.CONTENT_URI, threadId);
-        String selection = deleteAll ? null : "locked=0";
-        PduCache.getInstance().purge(uri);
-        handler.startDelete(token, null, uri, selection, null);
+        synchronized(sDeletingThreadsLock) {
+            if (sDeletingThreads) {
+                Log.e(TAG, "startDeleteAll already in the middle of a delete", new Exception());
+            }
+            sDeletingThreads = true;
+            Uri uri = ContentUris.withAppendedId(Threads.CONTENT_URI, threadId);
+            String selection = deleteAll ? null : "locked=0";
+
+            MmsApp.getApplication().getPduLoaderManager().clear();
+
+            // HACK: the keys to the thumbnail cache are the part uris, such as mms/part/3
+            // Because the part table doesn't have auto-increment ids, the part ids are reused
+            // when a message or thread is deleted. For now, we're clearing the whole thumbnail
+            // cache so we don't retrieve stale images when part ids are reused. This will be
+            // fixed in the next release in the mms provider.
+            MmsApp.getApplication().getThumbnailManager().clear();
+
+            handler.setDeleteToken(token);
+            handler.startDelete(token, new Long(threadId), uri, selection, null);
+        }
     }
 
     /**
@@ -656,10 +730,59 @@ public class Conversation {
      * @param token   The token that will be passed to onDeleteComplete
      * @param deleteAll Delete the whole thread including locked messages
      */
-    public static void startDeleteAll(AsyncQueryHandler handler, int token, boolean deleteAll) {
-        String selection = deleteAll ? null : "locked=0";
-        PduCache.getInstance().purge(Threads.CONTENT_URI);
-        handler.startDelete(token, null, Threads.CONTENT_URI, selection, null);
+    public static void startDeleteAll(ConversationQueryHandler handler, int token,
+            boolean deleteAll) {
+        synchronized(sDeletingThreadsLock) {
+            if (sDeletingThreads) {
+                Log.e(TAG, "startDeleteAll already in the middle of a delete", new Exception());
+            }
+            sDeletingThreads = true;
+            String selection = deleteAll ? null : "locked=0";
+
+            MmsApp.getApplication().getPduLoaderManager().clear();
+
+            // HACK: the keys to the thumbnail cache are the part uris, such as mms/part/3
+            // Because the part table doesn't have auto-increment ids, the part ids are reused
+            // when a message or thread is deleted. For now, we're clearing the whole thumbnail
+            // cache so we don't retrieve stale images when part ids are reused. This will be
+            // fixed in the next release in the mms provider.
+            MmsApp.getApplication().getThumbnailManager().clear();
+
+            handler.setDeleteToken(token);
+            handler.startDelete(token, new Long(-1), Threads.CONTENT_URI, selection, null);
+        }
+    }
+
+    public static class ConversationQueryHandler extends AsyncQueryHandler {
+        private int mDeleteToken;
+
+        public ConversationQueryHandler(ContentResolver cr) {
+            super(cr);
+        }
+
+        public void setDeleteToken(int token) {
+            mDeleteToken = token;
+        }
+
+        /**
+         * Always call this super method from your overridden onDeleteComplete function.
+         */
+        @Override
+        protected void onDeleteComplete(int token, Object cookie, int result) {
+            if (token == mDeleteToken) {
+                // Test code
+//                try {
+//                    Thread.sleep(10000);
+//                } catch (InterruptedException e) {
+//                }
+
+                // release lock
+                synchronized(sDeletingThreadsLock) {
+                    sDeletingThreads = false;
+                    sDeletingThreadsLock.notifyAll();
+                }
+            }
+        }
     }
 
     /**
@@ -906,11 +1029,14 @@ public class Conversation {
      * startup time.
      */
     public static void init(final Context context) {
-        new Thread(new Runnable() {
-            public void run() {
-                cacheAllThreads(context);
-            }
-        }).start();
+        Thread thread = new Thread(new Runnable() {
+                @Override
+                public void run() {
+                    cacheAllThreads(context);
+                }
+            }, "Conversation.init");
+        thread.setPriority(Thread.MIN_PRIORITY);
+        thread.start();
     }
 
     public static void markAllConversationsAsSeen(final Context context) {
@@ -918,7 +1044,8 @@ public class Conversation {
             LogTag.debug("Conversation.markAllConversationsAsSeen");
         }
 
-        new Thread(new Runnable() {
+        Thread thread = new Thread(new Runnable() {
+            @Override
             public void run() {
                 blockingMarkAllSmsMessagesAsSeen(context);
                 blockingMarkAllMmsMessagesAsSeen(context);
@@ -926,7 +1053,9 @@ public class Conversation {
                 // Always update notifications regardless of the read state.
                 MessagingNotification.blockingUpdateAllNotifications(context);
             }
-        }).start();
+        }, "Conversation.markAllConversationsAsSeen");
+        thread.setPriority(Thread.MIN_PRIORITY);
+        thread.start();
     }
 
     private static void blockingMarkAllSmsMessagesAsSeen(final Context context) {
@@ -1005,7 +1134,7 @@ public class Conversation {
      */
     public static boolean loadingThreads() {
         synchronized (Cache.getInstance()) {
-            return mLoadingThreads;
+            return sLoadingThreads;
         }
     }
 
@@ -1014,10 +1143,10 @@ public class Conversation {
             LogTag.debug("[Conversation] cacheAllThreads: begin");
         }
         synchronized (Cache.getInstance()) {
-            if (mLoadingThreads) {
+            if (sLoadingThreads) {
                 return;
                 }
-            mLoadingThreads = true;
+            sLoadingThreads = true;
         }
 
         // Keep track of what threads are now on disk so we
@@ -1066,7 +1195,7 @@ public class Conversation {
                 c.close();
             }
             synchronized (Cache.getInstance()) {
-                mLoadingThreads = false;
+                sLoadingThreads = false;
             }
         }
 

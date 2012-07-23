@@ -17,6 +17,7 @@
 
 package com.android.mms.ui;
 
+import com.android.ex.chips.RecipientEditTextView;
 import com.android.mms.MmsConfig;
 import com.android.mms.data.Contact;
 import com.android.mms.data.ContactList;
@@ -33,11 +34,16 @@ import android.text.SpannableStringBuilder;
 import android.text.Spanned;
 import android.text.TextUtils;
 import android.text.TextWatcher;
+import android.text.util.Rfc822Token;
+import android.text.util.Rfc822Tokenizer;
 import android.util.AttributeSet;
 import android.view.inputmethod.EditorInfo;
 import android.view.MotionEvent;
+import android.view.View;
 import android.view.ContextMenu.ContextMenuInfo;
+import android.widget.AdapterView;
 import android.widget.MultiAutoCompleteTextView;
+import android.widget.AutoCompleteTextView.Validator;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -45,17 +51,37 @@ import java.util.List;
 /**
  * Provide UI for editing the recipients of multi-media messages.
  */
-public class RecipientsEditor extends MultiAutoCompleteTextView {
+public class RecipientsEditor extends RecipientEditTextView {
     private int mLongPressedPosition = -1;
     private final RecipientsEditorTokenizer mTokenizer;
     private char mLastSeparator = ',';
+    private Runnable mOnSelectChipRunnable;
+    private final AddressValidator mInternalValidator;
+
+    /** A noop validator that does not munge invalid texts and claims any address is valid */
+    private class AddressValidator implements Validator {
+        public CharSequence fixText(CharSequence invalidText) {
+            return invalidText;
+        }
+
+        public boolean isValid(CharSequence text) {
+            return true;
+        }
+    }
 
     public RecipientsEditor(Context context, AttributeSet attrs) {
-        super(context, attrs, android.R.attr.autoCompleteTextViewStyle);
-        mTokenizer = new RecipientsEditorTokenizer(context, this);
+        super(context, attrs);
+
+        mTokenizer = new RecipientsEditorTokenizer();
         setTokenizer(mTokenizer);
+
+        mInternalValidator = new AddressValidator();
+        super.setValidator(mInternalValidator);
+
         // For the focus to move to the message body when soft Next is pressed
         setImeOptions(EditorInfo.IME_ACTION_NEXT);
+
+        setThreshold(1);    // pop-up the list after a single char is typed
 
         /*
          * The point of this TextWatcher is that when the user chooses
@@ -69,12 +95,14 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
         addTextChangedListener(new TextWatcher() {
             private Annotation[] mAffected;
 
+            @Override
             public void beforeTextChanged(CharSequence s, int start,
                     int count, int after) {
                 mAffected = ((Spanned) s).getSpans(start, start + count,
                         Annotation.class);
             }
 
+            @Override
             public void onTextChanged(CharSequence s, int start,
                     int before, int after) {
                 if (before == 0 && after == 1) {    // inserting a character
@@ -87,6 +115,7 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
                 }
             }
 
+            @Override
             public void afterTextChanged(Editable s) {
                 if (mAffected != null) {
                     for (Annotation a : mAffected) {
@@ -96,6 +125,19 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
                 mAffected = null;
             }
         });
+    }
+
+    @Override
+    public void onItemClick(AdapterView<?> parent, View view, int position, long id) {
+        super.onItemClick(parent, view, position, id);
+
+        if (mOnSelectChipRunnable != null) {
+            mOnSelectChipRunnable.run();
+        }
+    }
+
+    public void setOnSelectChipRunnable(Runnable onSelectChipRunnable) {
+        mOnSelectChipRunnable = onSelectChipRunnable;
     }
 
     @Override
@@ -208,8 +250,6 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
     }
 
     public void populate(ContactList list) {
-        SpannableStringBuilder sb = new SpannableStringBuilder();
-
         // Very tricky bug. In the recipient editor, we always leave a trailing
         // comma to make it easy for users to add additional recipients. When a
         // user types (or chooses from the dropdown) a new contact Mms has never
@@ -228,11 +268,17 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
         // and deletes chars into an address chosen from the suggestions, it'll cause
         // the number annotation to get deleted and the whole address (name + number) will
         // be used as the number.
-        for (Contact c : list) {
-            sb.append(contactToToken(c)).append(", ");
+        if (list.size() == 0) {
+            // The base class RecipientEditTextView will ignore empty text. That's why we need
+            // this special case.
+            setText(null);
+        } else {
+            for (Contact c : list) {
+                // Calling setText to set the recipients won't create chips,
+                // but calling append() will.
+                append(contactToToken(c) + ", ");
+            }
         }
-
-        setText(sb);
     }
 
     private int pointToPosition(int x, int y) {
@@ -286,7 +332,20 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
     }
 
     private static String getNumberAt(Spanned sp, int start, int end, Context context) {
-        return getFieldAt("number", sp, start, end, context);
+        String number = getFieldAt("number", sp, start, end, context);
+        number = PhoneNumberUtils.replaceUnicodeDigits(number);
+        if (!TextUtils.isEmpty(number)) {
+            int pos = number.indexOf('<');
+            if (pos >= 0 && pos < number.indexOf('>')) {
+                // The number looks like an Rfc882 address, i.e. <fred flinstone> 891-7823
+                Rfc822Token[] tokens = Rfc822Tokenizer.tokenize(number);
+                if (tokens.length == 0) {
+                    return number;
+                }
+                return tokens[0].getAddress();
+            }
+        }
+        return number;
     }
 
     private static int getSpanLength(Spanned sp, int start, int end, Context context) {
@@ -326,23 +385,17 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
 
     private class RecipientsEditorTokenizer
             implements MultiAutoCompleteTextView.Tokenizer {
-        private final MultiAutoCompleteTextView mList;
-        private final Context mContext;
 
-        RecipientsEditorTokenizer(Context context, MultiAutoCompleteTextView list) {
-            mList = list;
-            mContext = context;
-        }
-
-        /**
-         * Returns the start of the token that ends at offset
-         * <code>cursor</code> within <code>text</code>.
-         * It is a method from the MultiAutoCompleteTextView.Tokenizer interface.
-         */
+        @Override
         public int findTokenStart(CharSequence text, int cursor) {
             int i = cursor;
             char c;
 
+            // If we're sitting at a delimiter, back up so we find the previous token
+            if (i > 0 && ((c = text.charAt(i - 1)) == ',' || c == ';')) {
+                --i;
+            }
+            // Now back up until the start or until we find the separator of the previous token
             while (i > 0 && (c = text.charAt(i - 1)) != ',' && c != ';') {
                 i--;
             }
@@ -353,11 +406,7 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
             return i;
         }
 
-        /**
-         * Returns the end of the token (minus trailing punctuation)
-         * that begins at offset <code>cursor</code> within <code>text</code>.
-         * It is a method from the MultiAutoCompleteTextView.Tokenizer interface.
-         */
+        @Override
         public int findTokenEnd(CharSequence text, int cursor) {
             int i = cursor;
             int len = text.length();
@@ -374,11 +423,7 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
             return len;
         }
 
-        /**
-         * Returns <code>text</code>, modified, if necessary, to ensure that
-         * it ends with a token terminator (for example a space or comma).
-         * It is a method from the MultiAutoCompleteTextView.Tokenizer interface.
-         */
+        @Override
         public CharSequence terminateToken(CharSequence text) {
             int i = text.length();
 
@@ -405,7 +450,7 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
         }
 
         public List<String> getNumbers() {
-            Spanned sp = mList.getText();
+            Spanned sp = RecipientsEditor.this.getText();
             int len = sp.length();
             List<String> list = new ArrayList<String>();
 
@@ -415,13 +460,13 @@ public class RecipientsEditor extends MultiAutoCompleteTextView {
                 char c;
                 if ((i == len) || ((c = sp.charAt(i)) == ',') || (c == ';')) {
                     if (i > start) {
-                        list.add(getNumberAt(sp, start, i, mContext));
+                        list.add(getNumberAt(sp, start, i, getContext()));
 
                         // calculate the recipients total length. This is so if the name contains
                         // commas or semis, we'll skip over the whole name to the next
                         // recipient, rather than parsing this single name into multiple
                         // recipients.
-                        int spanLen = getSpanLength(sp, start, i, mContext);
+                        int spanLen = getSpanLength(sp, start, i, getContext());
                         if (spanLen > i) {
                             i = spanLen;
                         }

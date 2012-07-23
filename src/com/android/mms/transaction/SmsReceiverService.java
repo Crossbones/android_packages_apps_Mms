@@ -24,9 +24,11 @@ import java.util.Calendar;
 import java.util.GregorianCalendar;
 
 import com.android.mms.data.Contact;
+import com.android.mms.data.Conversation;
 import com.android.mms.ui.ClassZeroActivity;
 import com.android.mms.util.Recycler;
 import com.android.mms.util.SendingProgressTokenManager;
+import com.android.mms.widget.MmsWidgetProvider;
 import com.google.android.mms.MmsException;
 import android.database.sqlite.SqliteWrapper;
 
@@ -308,7 +310,7 @@ public class SmsReceiverService extends Service {
             }
 
             // Update the notification for failed messages since they may be deleted.
-            MessagingNotification.updateSendFailedNotification(this);
+            MessagingNotification.nonBlockingUpdateSendFailedNotification(this);
         } else if ((mResultCode == SmsManager.RESULT_ERROR_RADIO_OFF) ||
                 (mResultCode == SmsManager.RESULT_ERROR_NO_SERVICE)) {
             if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
@@ -363,8 +365,9 @@ public class SmsReceiverService extends Service {
         }
 
         if (messageUri != null) {
+            long threadId = MessagingNotification.getSmsThreadId(this, messageUri);
             // Called off of the UI thread so ok to block.
-            MessagingNotification.blockingUpdateNewMessageIndicator(this, true, false);
+            MessagingNotification.blockingUpdateNewMessageIndicator(this, threadId, false);
         }
     }
 
@@ -381,7 +384,8 @@ public class SmsReceiverService extends Service {
         sendFirstQueuedMessage();
 
         // Called off of the UI thread so ok to block.
-        MessagingNotification.blockingUpdateNewMessageIndicator(this, true, false);
+        MessagingNotification.blockingUpdateNewMessageIndicator(
+                this, MessagingNotification.THREAD_ALL, false);
     }
 
     /**
@@ -557,7 +561,7 @@ public class SmsReceiverService extends Service {
         }
 
         if (((threadId == null) || (threadId == 0)) && (address != null)) {
-            threadId = Threads.getOrCreateThreadId(context, address);
+            threadId = Conversation.getOrCreateThreadId(context, address);
             values.put(Sms.THREAD_ID, threadId);
         }
 
@@ -566,7 +570,8 @@ public class SmsReceiverService extends Service {
         Uri insertedUri = SqliteWrapper.insert(context, resolver, Inbox.CONTENT_URI, values);
 
         // Now make sure we're not over the limit in stored messages
-        Recycler.getSmsRecycler().deleteOldMessagesByThreadId(getApplicationContext(), threadId);
+        Recycler.getSmsRecycler().deleteOldMessagesByThreadId(context, threadId);
+        MmsWidgetProvider.notifyDatasetChanged(context);
 
         return insertedUri;
     }
@@ -651,7 +656,6 @@ public class SmsReceiverService extends Service {
             // Allow un-matched register-unregister calls
         }
     }
-
 }
 
 

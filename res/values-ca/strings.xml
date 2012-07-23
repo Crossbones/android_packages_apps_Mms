@@ -34,6 +34,7 @@
     <string name="menu_view" msgid="7448852683948080108">"Visualitza el fil"</string>
     <string name="menu_debug_dump" msgid="6855869130206549643">"BUIDATGE DE DEPURACIÓ"</string>
     <string name="refreshing" msgid="987335057871404222">"S\'està actualitzant..."</string>
+    <string name="menu_cell_broadcasts" msgid="5646161375983084660">"Emissions mòbils"</string>
     <string name="has_draft" msgid="2487465595514636160">"Esborrany"</string>
     <string name="no_subject_view" msgid="7795086723069563537">"(Sense assumpte)"</string>
     <string name="messagelist_sender_self" msgid="3579016854116401602">"Mi"</string>
@@ -92,7 +93,6 @@
     <string name="failed_to_resize_image" msgid="5608354151631833669">"No s\'ha canviat la mida de la imatge."</string>
     <string name="resize_image_error_information" msgid="3783200130776554475">"Aquesta imatge és massa gran per enviar-la, fins i tot si ajustes la mida."</string>
     <string name="forward_prefix" msgid="276280492803486464">"RV: "</string>
-    <string name="discard_message" msgid="6078326880056142781">"Descarta"</string>
     <string name="discard_message_reason" msgid="2667664943003796133">"El missatge es descartarà perquè no té cap destinatari vàlid."</string>
     <string name="has_invalid_recipient" msgid="1485388396900997383">"Destinataris no vàlids: &lt;<xliff:g id="NAME">%1$s</xliff:g>&gt;"</string>
     <string name="invalid_destination" msgid="4573835601024786416">"L\'adreça de destinació no és vàlida."</string>
@@ -113,6 +113,7 @@
     <string name="too_many_attachments" msgid="3774037894899750070">"Hi ha un límit de <xliff:g id="MAXLIMIT">%1$s</xliff:g> fitxers adjunts. Només s\'hi afegiran els <xliff:g id="CURRENTCOUNT">%2$s</xliff:g> primers."</string>
     <string name="adding_attachments_title" msgid="2034535554212405529">"S\'estan afegint els fitxers adjunts"</string>
     <string name="adding_attachments" msgid="5871373105122355632">"Espera mentre s\'afegeixen els elements a la presentació de diapositives."</string>
+    <string name="building_slideshow_title" msgid="1232338692400726385">"S\'està creant la presentació de diapositives"</string>
     <string name="cannot_play_audio" msgid="253920977253666735">"No es pot reproduir l\'àudio."</string>
     <string name="preview" msgid="5438149136136446756">"Previsualitza"</string>
     <string name="preview_slideshow" msgid="6824095909448728427">"Previsualitza"</string>
@@ -199,6 +200,7 @@
     <string name="delete" msgid="1409973060081564612">"Suprimeix"</string>
     <string name="select_conversations" msgid="7816517565640002844">"Tria converses"</string>
     <string name="no_conversations" msgid="6773767655149258445">"No hi ha cap conversa."</string>
+    <string name="loading_conversations" msgid="5510430408235967094">"S\'estan carregant les converses."</string>
     <string name="cannot_get_details" msgid="850292987983026806">"No es poden obtenir els detalls."</string>
     <string name="message_details_title" msgid="9223295113731634528">"Detalls del missatge"</string>
     <string name="message_type_label" msgid="7975373966795945566">"Tipus: "</string>
@@ -239,6 +241,7 @@
     <string name="status_rejected" msgid="2613641949065942678">"Rebutjat"</string>
     <string name="recipient_label" msgid="3922667485312634446">"Destinatari: "</string>
     <string name="status_label" msgid="7283375460919181660">"Estat: "</string>
+    <string name="delivered_label" msgid="3514011729156932928">"S\'ha entregat: "</string>
     <string name="attach_image" msgid="6439985727687107742">"Imatges"</string>
     <string name="attach_take_photo" msgid="4280601313184373837">"Captura una imatge"</string>
     <string name="attach_video" msgid="4264272693501538294">"Vídeos"</string>
@@ -322,10 +325,22 @@
     <string name="adding_recipients" msgid="2962810172527532357">"S\'estan afegint destinataris..."</string>
     <string name="draft_separator" msgid="5402575086540243019">", "</string>
     <string name="message_count_format" msgid="4434763220590778012">" <xliff:g id="NUMBER">%1$s</xliff:g>"</string>
+    <string name="message_count_notification" msgid="3629968600032690007">"<xliff:g id="NUMBER">%1$s</xliff:g> missatges nous"</string>
+  <plurals name="message_count_notification_overflow">
+    <item quantity="one" msgid="3340591167508150806">"i <xliff:g id="NUMBER">%1$s</xliff:g> missatges més"</item>
+    <item quantity="other" msgid="1393002799298501480">"i <xliff:g id="NUMBER">%1$s</xliff:g> missatges més"</item>
+  </plurals>
     <string name="error_state" msgid="5177386717626893507">"Estat incoherent"</string>
     <string name="error_state_text" msgid="7918866106335387710">"L\'estat de les converses i dels destinataris no és coherent. Crea un informe d\'error i informa\'n mitjançant http://go/droidanizer"</string>
   <plurals name="recipient_count">
     <item quantity="other" msgid="7338580381574463136">"<xliff:g id="NUMBER">%1$s</xliff:g> persones"</item>
   </plurals>
     <string name="disable_notifications_dialog_message" msgid="7644011234972074096">"Vols deixar de duplicar les notificacions de missatges de text de l\'aplicació Missatgeria predeterminada?"</string>
+    <string name="view_more_conversations" msgid="7275920132410734671">"Mostra més converses"</string>
+    <string name="attachment_audio" msgid="2867960243300539143">"Àudio"</string>
+    <string name="attachment_slideshow" msgid="5867689101881763318">"Presentació de diapositives"</string>
+    <string name="attachment_video" msgid="4252062022156694591">"Vídeo"</string>
+    <string name="attachment_picture" msgid="3709286281567284296">"Imatge"</string>
+    <string name="notification_separator" msgid="2334673105226536422">"  "</string>
+    <string name="enumeration_comma" msgid="213598026698964628">", "</string>
 </resources>

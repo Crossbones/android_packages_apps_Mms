@@ -34,6 +34,7 @@
     <string name="menu_view" msgid="7448852683948080108">"Ver conversación"</string>
     <string name="menu_debug_dump" msgid="6855869130206549643">"VOLCADO DE DEPURACIÓN"</string>
     <string name="refreshing" msgid="987335057871404222">"Actualizando..."</string>
+    <string name="menu_cell_broadcasts" msgid="5646161375983084660">"Difusiones móviles"</string>
     <string name="has_draft" msgid="2487465595514636160">"Borrador"</string>
     <string name="no_subject_view" msgid="7795086723069563537">"(Sin asunto)"</string>
     <string name="messagelist_sender_self" msgid="3579016854116401602">"Yo"</string>
@@ -92,13 +93,12 @@
     <string name="failed_to_resize_image" msgid="5608354151631833669">"No se ha podido ajustar el tamaño de la imagen."</string>
     <string name="resize_image_error_information" msgid="3783200130776554475">"Esta imagen es demasiado grande para enviarla aunque se ajuste su tamaño."</string>
     <string name="forward_prefix" msgid="276280492803486464">"Fwd: "</string>
-    <string name="discard_message" msgid="6078326880056142781">"Descartar"</string>
     <string name="discard_message_reason" msgid="2667664943003796133">"El mensaje se descartará porque los destinatarios no son válidos."</string>
     <string name="has_invalid_recipient" msgid="1485388396900997383">"Destinatarios no válidos: &lt;<xliff:g id="NAME">%1$s</xliff:g>&gt;"</string>
     <string name="invalid_destination" msgid="4573835601024786416">"Dirección de destino no válida"</string>
     <string name="service_not_activated" msgid="9178218144019626176">"No se ha activado el servicio en la red."</string>
     <string name="service_message_not_found" msgid="1908877102600048515">"El mensaje ha caducado o no está disponible."</string>
-    <string name="service_network_problem" msgid="4583269174855943025">"No se ha podido realizar el envío debido a una incidencia relacionada con la red."</string>
+    <string name="service_network_problem" msgid="4583269174855943025">"No se ha podido realizar el envío debido a un problema con la red."</string>
     <string name="invalid_recipient_message" msgid="6465343105010999068">"Corrige la dirección de los destinatarios para que se pueda enviar el mensaje."</string>
     <string name="cannot_send_message" msgid="3414307479833622644">"No se puede enviar el mensaje"</string>
     <string name="cannot_send_message_reason" msgid="8745080126044054343">"Los destinatarios del mensaje no son válidos."</string>
@@ -113,6 +113,7 @@
     <string name="too_many_attachments" msgid="3774037894899750070">"Existe un límite de <xliff:g id="MAXLIMIT">%1$s</xliff:g> archivos adjuntos. Solo se añadirán los <xliff:g id="CURRENTCOUNT">%2$s</xliff:g> primeros."</string>
     <string name="adding_attachments_title" msgid="2034535554212405529">"Añadiendo archivos adjuntos"</string>
     <string name="adding_attachments" msgid="5871373105122355632">"Espera mientras se añaden los elementos a la presentación."</string>
+    <string name="building_slideshow_title" msgid="1232338692400726385">"Creando presentación..."</string>
     <string name="cannot_play_audio" msgid="253920977253666735">"No se puede reproducir el audio."</string>
     <string name="preview" msgid="5438149136136446756">"Vista previa"</string>
     <string name="preview_slideshow" msgid="6824095909448728427">"Vista previa"</string>
@@ -158,13 +159,13 @@
     <string name="pref_summary_mms_delivery_reports" msgid="4874657984217756112">"Solicitar un informe de entrega al enviar un mensaje"</string>
     <string name="pref_summary_mms_read_reports" msgid="2748323864008907440">"Solicitar un informe de mensaje leído al enviar un mensaje"</string>
     <string name="pref_summary_sms_delivery_reports" msgid="5852207702358546129">"Solicitar un informe de entrega cada vez que se envíe un mensaje"</string>
-    <string name="pref_summary_auto_delete" msgid="7719538116486177613">"Eliminar mensajes antiguos al superar los límites"</string>
+    <string name="pref_summary_auto_delete" msgid="7719538116486177613">"Eliminar mensajes antiguos al superar el límite de mensajes"</string>
     <string name="pref_summary_delete_limit" msgid="597128041393045216">"<xliff:g id="COUNT">%1$s</xliff:g> mensajes por conversación"</string>
     <string name="pref_title_manage_sim_messages" msgid="7820895261757881177">"Administrar mensajes de SIM"</string>
     <string name="pref_title_mms_delivery_reports" msgid="6666857926679451910">"Informes de entrega"</string>
     <string name="pref_title_mms_read_reports" msgid="4882179829495828541">"Informes de leídos"</string>
     <string name="pref_title_sms_delivery_reports" msgid="876064208254451038">"Informes de entrega"</string>
-    <string name="pref_title_auto_delete" msgid="7227835692631701134">"Eliminar mensajes antiguos"</string>
+    <string name="pref_title_auto_delete" msgid="7227835692631701134">"Borrar mensajes antiguos"</string>
     <string name="pref_title_sms_delete" msgid="6890538316799296878">"Límite de mensajes de texto"</string>
     <string name="pref_title_mms_delete" msgid="7265878070847351664">"Límite de mensajes multimedia"</string>
     <string name="pref_title_notification_enabled" msgid="9118792213953729414">"Notificaciones"</string>
@@ -172,7 +173,7 @@
     <string name="pref_title_notification_vibrateWhen" msgid="4251208067092761057">"Vibración"</string>
     <string name="pref_summary_notification_vibrateWhen" msgid="669655090822561447">"Vibrar también al notificar"</string>
     <string name="pref_title_notification_ringtone" msgid="5467265237106229952">"Seleccionar tono"</string>
-    <string name="pref_messages_to_save" msgid="3202539743892934926">"Establece el número de mensajes que quieres guardar"</string>
+    <string name="pref_messages_to_save" msgid="3202539743892934926">"Elige el número de mensajes que quieres guardar"</string>
   <string-array name="prefEntries_vibrateWhen">
     <item msgid="2520871831815631409">"Siempre"</item>
     <item msgid="6069709696037750627">"Solo en modo silencio"</item>
@@ -181,8 +182,8 @@
     <string name="prefDialogTitle_vibrateWhen" msgid="6419655771690242118">"Vibración"</string>
     <string name="pref_title_mms_auto_retrieval" msgid="4021878285474431355">"Recuperar automáticamente"</string>
     <string name="pref_summary_mms_auto_retrieval" msgid="925163257363757048">"Recuperar mensajes automáticamente"</string>
-    <string name="pref_title_mms_retrieval_during_roaming" msgid="6016227402731817804">"Recuperar autom en itinerancia"</string>
-    <string name="pref_summary_mms_retrieval_during_roaming" msgid="2427892806582531020">"Recuperar automáticamente mensajes en itinerancia"</string>
+    <string name="pref_title_mms_retrieval_during_roaming" msgid="6016227402731817804">"En itinerancia"</string>
+    <string name="pref_summary_mms_retrieval_during_roaming" msgid="2427892806582531020">"Recuperar mensajes automáticamente en itinerancia"</string>
     <string name="confirm_dialog_title" msgid="2187213750475782725">"¿Eliminar?"</string>
     <string name="confirm_dialog_locked_title" msgid="8179085718150932242">"¿Quieres eliminar el mensaje bloqueado?"</string>
   <plurals name="confirm_delete_conversation">
@@ -199,6 +200,7 @@
     <string name="delete" msgid="1409973060081564612">"Eliminar"</string>
     <string name="select_conversations" msgid="7816517565640002844">"Seleccionar conversaciones"</string>
     <string name="no_conversations" msgid="6773767655149258445">"No hay conversaciones."</string>
+    <string name="loading_conversations" msgid="5510430408235967094">"Cargando conversaciones..."</string>
     <string name="cannot_get_details" msgid="850292987983026806">"No se puede obtener información detallada."</string>
     <string name="message_details_title" msgid="9223295113731634528">"Detalles del mensaje"</string>
     <string name="message_type_label" msgid="7975373966795945566">"Tipo: "</string>
@@ -239,6 +241,7 @@
     <string name="status_rejected" msgid="2613641949065942678">"Rechazados:"</string>
     <string name="recipient_label" msgid="3922667485312634446">"Destinatario: "</string>
     <string name="status_label" msgid="7283375460919181660">"Estado: "</string>
+    <string name="delivered_label" msgid="3514011729156932928">"Enviado: "</string>
     <string name="attach_image" msgid="6439985727687107742">"Imagen"</string>
     <string name="attach_take_photo" msgid="4280601313184373837">"Capturar imagen"</string>
     <string name="attach_video" msgid="4264272693501538294">"Vídeos"</string>
@@ -322,10 +325,22 @@
     <string name="adding_recipients" msgid="2962810172527532357">"Añadiendo destinatarios…"</string>
     <string name="draft_separator" msgid="5402575086540243019">", "</string>
     <string name="message_count_format" msgid="4434763220590778012">" <xliff:g id="NUMBER">%1$s</xliff:g>"</string>
+    <string name="message_count_notification" msgid="3629968600032690007">"<xliff:g id="NUMBER">%1$s</xliff:g> mensajes nuevos"</string>
+  <plurals name="message_count_notification_overflow">
+    <item quantity="one" msgid="3340591167508150806">"Otro mensaje (<xliff:g id="NUMBER">%1$s</xliff:g>)"</item>
+    <item quantity="other" msgid="1393002799298501480">"Otros <xliff:g id="NUMBER">%1$s</xliff:g> mensajes"</item>
+  </plurals>
     <string name="error_state" msgid="5177386717626893507">"Estado inconsistente"</string>
     <string name="error_state_text" msgid="7918866106335387710">"El estado de las conversaciones y los destinatarios no es correcto. Escribe un informe de error y envíalo a través de http://go/droidanizer."</string>
   <plurals name="recipient_count">
     <item quantity="other" msgid="7338580381574463136">"<xliff:g id="NUMBER">%1$s</xliff:g> personas"</item>
   </plurals>
     <string name="disable_notifications_dialog_message" msgid="7644011234972074096">"¿Quieres dejar de recibir notificaciones de mensajes de texto duplicadas procedentes de la aplicación Mensajes?"</string>
+    <string name="view_more_conversations" msgid="7275920132410734671">"Ver más conversaciones"</string>
+    <string name="attachment_audio" msgid="2867960243300539143">"Audio"</string>
+    <string name="attachment_slideshow" msgid="5867689101881763318">"Presentación"</string>
+    <string name="attachment_video" msgid="4252062022156694591">"Vídeo"</string>
+    <string name="attachment_picture" msgid="3709286281567284296">"Imagen"</string>
+    <string name="notification_separator" msgid="2334673105226536422">"  "</string>
+    <string name="enumeration_comma" msgid="213598026698964628">", "</string>
 </resources>

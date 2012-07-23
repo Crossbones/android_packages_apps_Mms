@@ -18,6 +18,7 @@ package com.android.mms.data;
 
 import java.util.ArrayList;
 import java.util.Arrays;
+import java.util.Iterator;
 import java.util.List;
 
 import android.app.Activity;
@@ -28,44 +29,44 @@ import android.content.Context;
 import android.database.Cursor;
 import android.database.sqlite.SqliteWrapper;
 import android.net.Uri;
+import android.os.AsyncTask;
 import android.os.Bundle;
 import android.provider.Telephony.Mms;
 import android.provider.Telephony.MmsSms;
-import android.provider.Telephony.Sms;
-import android.provider.Telephony.Threads;
 import android.provider.Telephony.MmsSms.PendingMessages;
+import android.provider.Telephony.Sms;
 import android.telephony.SmsMessage;
 import android.text.TextUtils;
 import android.util.Log;
+import android.util.Pair;
 
 import com.android.common.contacts.DataUsageStatUpdater;
 import com.android.common.userhappiness.UserHappinessSignals;
-import com.android.mms.ContentRestrictionException;
 import com.android.mms.ExceedMessageSizeException;
 import com.android.mms.LogTag;
+import com.android.mms.MmsApp;
 import com.android.mms.MmsConfig;
 import com.android.mms.ResolutionException;
 import com.android.mms.UnsupportContentTypeException;
-import com.android.mms.model.AudioModel;
 import com.android.mms.model.ImageModel;
-import com.android.mms.model.MediaModel;
 import com.android.mms.model.SlideModel;
 import com.android.mms.model.SlideshowModel;
 import com.android.mms.model.TextModel;
-import com.android.mms.model.VideoModel;
 import com.android.mms.transaction.MessageSender;
 import com.android.mms.transaction.MmsMessageSender;
 import com.android.mms.transaction.SmsMessageSender;
-import com.android.mms.ui.AttachmentEditor;
 import com.android.mms.ui.ComposeMessageActivity;
 import com.android.mms.ui.MessageUtils;
 import com.android.mms.ui.SlideshowEditor;
 import com.android.mms.util.DraftCache;
 import com.android.mms.util.Recycler;
+import com.android.mms.util.ThumbnailManager;
+import com.android.mms.widget.MmsWidgetProvider;
 import com.google.android.mms.ContentType;
 import com.google.android.mms.MmsException;
 import com.google.android.mms.pdu.EncodedStringValue;
 import com.google.android.mms.pdu.PduBody;
+import com.google.android.mms.pdu.PduHeaders;
 import com.google.android.mms.pdu.PduPersister;
 import com.google.android.mms.pdu.SendReq;
 
@@ -231,6 +232,7 @@ public class WorkingMessage {
 
         WorkingMessage msg = new WorkingMessage(activity);
         if (msg.loadFromUri(uri)) {
+            msg.mHasMmsDraft = true;
             return msg;
         }
 
@@ -283,46 +285,64 @@ public class WorkingMessage {
      * none exists.
      */
     public static WorkingMessage loadDraft(ComposeMessageActivity activity,
-                                           Conversation conv) {
-        WorkingMessage msg = new WorkingMessage(activity);
-        if (msg.loadFromConversation(conv)) {
-            return msg;
-        } else {
-            return createEmpty(activity);
-        }
-    }
+                                           final Conversation conv,
+                                           final Runnable onDraftLoaded) {
+        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) LogTag.debug("loadDraft %s", conv);
 
-    private boolean loadFromConversation(Conversation conv) {
-        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) LogTag.debug("loadFromConversation %s", conv);
-
-        long threadId = conv.getThreadId();
-        if (threadId <= 0) {
-            return false;
-        }
-
-        // Look for an SMS draft first.
-        mText = readDraftSmsMessage(conv);
-        if (!TextUtils.isEmpty(mText)) {
-            mHasSmsDraft = true;
-            return true;
-        }
-
-        // Then look for an MMS draft.
-        StringBuilder sb = new StringBuilder();
-        Uri uri = readDraftMmsMessage(mActivity, conv, sb);
-        if (uri != null) {
-            if (loadFromUri(uri)) {
-                // If there was an MMS message, readDraftMmsMessage
-                // will put the subject in our supplied StringBuilder.
-                if (sb.length() > 0) {
-                    setSubject(sb.toString(), false);
-                }
-                mHasMmsDraft = true;
-                return true;
+        final WorkingMessage msg = createEmpty(activity);
+        if (conv.getThreadId() <= 0) {
+            if (onDraftLoaded != null) {
+                onDraftLoaded.run();
             }
+            return msg;
         }
 
-        return false;
+        new AsyncTask<Void, Void, Pair<String, String>>() {
+
+            // Return a Pair where:
+            //    first - non-empty String representing the text of an SMS draft
+            //    second - non-null String representing the text of an MMS subject
+            @Override
+            protected Pair<String, String> doInBackground(Void... none) {
+                // Look for an SMS draft first.
+                String draftText = msg.readDraftSmsMessage(conv);
+                String subject = null;
+
+                if (TextUtils.isEmpty(draftText)) {
+                    // No SMS draft so look for an MMS draft.
+                    StringBuilder sb = new StringBuilder();
+                    Uri uri = readDraftMmsMessage(msg.mActivity, conv, sb);
+                    if (uri != null) {
+                        if (msg.loadFromUri(uri)) {
+                            // If there was an MMS message, readDraftMmsMessage
+                            // will put the subject in our supplied StringBuilder.
+                            subject = sb.toString();
+                        }
+                    }
+                }
+                Pair<String, String> result = new Pair<String, String>(draftText, subject);
+                return result;
+            }
+
+            @Override
+            protected void onPostExecute(Pair<String, String> result) {
+                if (!TextUtils.isEmpty(result.first)) {
+                    msg.mHasSmsDraft = true;
+                    msg.setText(result.first);
+                }
+                if (result.second != null) {
+                    msg.mHasMmsDraft = true;
+                    if (!TextUtils.isEmpty(result.second)) {
+                        msg.setSubject(result.second, false);
+                    }
+                }
+                if (onDraftLoaded != null) {
+                    onDraftLoaded.run();
+                }
+            }
+        }.execute();
+
+        return msg;
     }
 
     /**
@@ -340,15 +360,15 @@ public class WorkingMessage {
     }
 
     /**
-     * Returns true if the message has any text. A message with just whitespace is not considered
+     * @return True if the message has any text. A message with just whitespace is not considered
      * to have text.
-     * @return
      */
     public boolean hasText() {
         return mText != null && TextUtils.getTrimmedLength(mText) > 0;
     }
 
     public void removeAttachment(boolean notify) {
+        removeThumbnailsFromCache(mSlideshow);
         mAttachmentType = TEXT;
         mSlideshow = null;
         if (mMessageUri != null) {
@@ -365,6 +385,32 @@ public class WorkingMessage {
         }
     }
 
+    public static void removeThumbnailsFromCache(SlideshowModel slideshow) {
+        if (slideshow != null) {
+            ThumbnailManager thumbnailManager = MmsApp.getApplication().getThumbnailManager();
+            boolean removedSomething = false;
+            Iterator<SlideModel> iterator = slideshow.iterator();
+            while (iterator.hasNext()) {
+                SlideModel slideModel = iterator.next();
+                if (slideModel.hasImage()) {
+                    thumbnailManager.removeThumbnail(slideModel.getImage().getUri());
+                    removedSomething = true;
+                } else if (slideModel.hasVideo()) {
+                    thumbnailManager.removeThumbnail(slideModel.getVideo().getUri());
+                    removedSomething = true;
+                }
+            }
+            if (removedSomething) {
+                // HACK: the keys to the thumbnail cache are the part uris, such as mms/part/3
+                // Because the part table doesn't have auto-increment ids, the part ids are reused
+                // when a message or thread is deleted. For now, we're clearing the whole thumbnail
+                // cache so we don't retrieve stale images when part ids are reused. This will be
+                // fixed in the next release in the mms provider.
+                MmsApp.getApplication().getThumbnailManager().clearBackingStore();
+            }
+        }
+    }
+
     /**
      * Adds an attachment to the message, replacing an old one if it existed.
      * @param type Type of this attachment, such as {@link IMAGE}
@@ -377,6 +423,7 @@ public class WorkingMessage {
             LogTag.debug("setAttachment type=%d uri %s", type, dataUri);
         }
         int result = OK;
+        SlideshowEditor slideShowEditor = new SlideshowEditor(mActivity, mSlideshow);
 
         // Special case for deleting a slideshow. When ComposeMessageActivity gets told to
         // remove an attachment (search for AttachmentEditor.MSG_REMOVE_ATTACHMENT), it calls
@@ -388,41 +435,37 @@ public class WorkingMessage {
         // see their old slideshow they previously deleted. Here we really delete the slideshow.
         if (type == TEXT && mAttachmentType == SLIDESHOW && mSlideshow != null && dataUri == null
                 && !append) {
-            SlideshowEditor slideShowEditor = new SlideshowEditor(mActivity, mSlideshow);
             slideShowEditor.removeAllSlides();
         }
 
         // Make sure mSlideshow is set up and has a slide.
-        ensureSlideshow();
+        ensureSlideshow();      // mSlideshow can be null before this call, won't be afterwards
+        slideShowEditor.setSlideshow(mSlideshow);
 
-        // Change the attachment and translate the various underlying
-        // exceptions into useful error codes.
-        try {
-            if (append) {
-                appendMedia(type, dataUri);
-            } else {
-                changeMedia(type, dataUri);
-            }
-        } catch (MmsException e) {
-            result = UNKNOWN_ERROR;
-        } catch (UnsupportContentTypeException e) {
-            result = UNSUPPORTED_TYPE;
-        } catch (ExceedMessageSizeException e) {
-            result = MESSAGE_SIZE_EXCEEDED;
-        } catch (ResolutionException e) {
-            result = IMAGE_TOO_LARGE;
-        }
+        // Change the attachment
+        result = append ? appendMedia(type, dataUri, slideShowEditor)
+                : changeMedia(type, dataUri, slideShowEditor);
 
         // If we were successful, update mAttachmentType and notify
         // the listener than there was a change.
         if (result == OK) {
             mAttachmentType = type;
-        } else if (append) {
-            // We added a new slide and what we attempted to insert on the slide failed.
-            // Delete that slide, otherwise we could end up with a bunch of blank slides.
-            SlideshowEditor slideShowEditor = new SlideshowEditor(mActivity, mSlideshow);
-            slideShowEditor.removeSlide(mSlideshow.size() - 1);
         }
+        correctAttachmentState();
+
+        if (type == IMAGE) {
+            // Prime the image's cache; helps A LOT when the image is coming from the network
+            // (e.g. Picasa album). See b/5445690.
+            int numSlides = mSlideshow.size();
+            if (numSlides > 0) {
+                ImageModel imgModel = mSlideshow.get(numSlides - 1).getImage();
+                if (imgModel != null) {
+                    cancelThumbnailLoading();
+                    imgModel.loadThumbnailBitmap(null);
+                }
+            }
+        }
+
         mStatusListener.onAttachmentChanged();  // have to call whether succeeded or failed,
                                                 // because a replace that fails, removes the slide
 
@@ -437,7 +480,9 @@ public class WorkingMessage {
                 */
                 int msgCount = params[0];
 
-                if (msgCount >= MmsConfig.getSmsToMmsTextThreshold()) {
+                if (msgCount > 1) {
+                    // The provider doesn't support multi-part sms's so as soon as the user types
+                    // an sms longer than one segment, we have to turn the message into an mms.
                     setLengthRequiresMms(true, false);
                 } else {
                     updateState(HAS_ATTACHMENT, hasAttachment(), true);
@@ -449,7 +494,6 @@ public class WorkingMessage {
             // Set HAS_ATTACHMENT if we need it.
             updateState(HAS_ATTACHMENT, hasAttachment(), true);
         }
-        correctAttachmentState();
         return result;
     }
 
@@ -470,6 +514,16 @@ public class WorkingMessage {
         }
 
         return false;
+    }
+
+    private void cancelThumbnailLoading() {
+        int numSlides = mSlideshow != null ? mSlideshow.size() : 0;
+        if (numSlides > 0) {
+            ImageModel imgModel = mSlideshow.get(numSlides - 1).getImage();
+            if (imgModel != null) {
+                imgModel.cancelThumbnailLoading();
+            }
+        }
     }
 
     /**
@@ -499,21 +553,23 @@ public class WorkingMessage {
 
     /**
      * Change the message's attachment to the data in the specified Uri.
-     * Used only for single-slide ("attachment mode") messages.
+     * Used only for single-slide ("attachment mode") messages. If the attachment fails to
+     * attach, restore the slide to its original state.
      */
-    private void changeMedia(int type, Uri uri) throws MmsException {
-        SlideModel slide = mSlideshow.get(0);
-        MediaModel media;
+    private int changeMedia(int type, Uri uri, SlideshowEditor slideShowEditor) {
+        SlideModel originalSlide = mSlideshow.get(0);
+        if (originalSlide != null) {
+            slideShowEditor.removeSlide(0);     // remove the original slide
+        }
+        slideShowEditor.addNewSlide(0);
+        SlideModel slide = mSlideshow.get(0);   // get the new empty slide
+        int result = OK;
 
         if (slide == null) {
             Log.w(LogTag.TAG, "[WorkingMessage] changeMedia: no slides!");
-            return;
+            return result;
         }
 
-        // Remove any previous attachments.
-        slide.removeImage();
-        slide.removeVideo();
-        slide.removeAudio();
         // Clear the attachment type since we removed all the attachments. If this isn't cleared
         // and the slide.add fails (for instance, a selected video could be too big), we'll be
         // left in a state where we think we have an attachment, but it's been removed from the
@@ -522,38 +578,28 @@ public class WorkingMessage {
 
         // If we're changing to text, just bail out.
         if (type == TEXT) {
-            return;
+            return result;
         }
 
-        // Make a correct MediaModel for the type of attachment.
-        if (type == IMAGE) {
-            media = new ImageModel(mActivity, uri, mSlideshow.getLayout().getImageRegion());
-        } else if (type == VIDEO) {
-            media = new VideoModel(mActivity, uri, mSlideshow.getLayout().getImageRegion());
-        } else if (type == AUDIO) {
-            media = new AudioModel(mActivity, uri);
-        } else {
-            throw new IllegalArgumentException("changeMedia type=" + type + ", uri=" + uri);
+        result = internalChangeMedia(type, uri, 0, slideShowEditor);
+        if (result != OK) {
+            slideShowEditor.removeSlide(0);             // remove the failed slide
+            if (originalSlide != null) {
+                slideShowEditor.addSlide(0, originalSlide); // restore the original slide.
+            }
         }
-
-        // Add it to the slide.
-        slide.add(media);
-
-        // For video and audio, set the duration of the slide to
-        // that of the attachment.
-        if (type == VIDEO || type == AUDIO) {
-            slide.updateDuration(media.getDuration());
-        }
+        return result;
     }
 
     /**
      * Add the message's attachment to the data in the specified Uri to a new slide.
      */
-    private void appendMedia(int type, Uri uri) throws MmsException {
+    private int appendMedia(int type, Uri uri, SlideshowEditor slideShowEditor) {
+        int result = OK;
 
         // If we're changing to text, just bail out.
         if (type == TEXT) {
-            return;
+            return result;
         }
 
         // The first time this method is called, mSlideshow.size() is going to be
@@ -566,32 +612,49 @@ public class WorkingMessage {
             addNewSlide = false;
         }
         if (addNewSlide) {
-            SlideshowEditor slideShowEditor = new SlideshowEditor(mActivity, mSlideshow);
             if (!slideShowEditor.addNewSlide()) {
-                return;
+                return result;
             }
         }
-        // Make a correct MediaModel for the type of attachment.
-        MediaModel media;
-        SlideModel slide = mSlideshow.get(mSlideshow.size() - 1);
-        if (type == IMAGE) {
-            media = new ImageModel(mActivity, uri, mSlideshow.getLayout().getImageRegion());
-        } else if (type == VIDEO) {
-            media = new VideoModel(mActivity, uri, mSlideshow.getLayout().getImageRegion());
-        } else if (type == AUDIO) {
-            media = new AudioModel(mActivity, uri);
-        } else {
-            throw new IllegalArgumentException("changeMedia type=" + type + ", uri=" + uri);
+        int slideNum = mSlideshow.size() - 1;
+        result = internalChangeMedia(type, uri, slideNum, slideShowEditor);
+        if (result != OK) {
+            // We added a new slide and what we attempted to insert on the slide failed.
+            // Delete that slide, otherwise we could end up with a bunch of blank slides.
+            // It's ok that we're removing the slide even if we didn't add it (because it was
+            // the first default slide). If adding the first slide fails, we want to remove it.
+            slideShowEditor.removeSlide(slideNum);
         }
+        return result;
+    }
 
-        // Add it to the slide.
-        slide.add(media);
-
-        // For video and audio, set the duration of the slide to
-        // that of the attachment.
-        if (type == VIDEO || type == AUDIO) {
-            slide.updateDuration(media.getDuration());
+    private int internalChangeMedia(int type, Uri uri, int slideNum,
+            SlideshowEditor slideShowEditor) {
+        int result = OK;
+        try {
+            if (type == IMAGE) {
+                slideShowEditor.changeImage(slideNum, uri);
+            } else if (type == VIDEO) {
+                slideShowEditor.changeVideo(slideNum, uri);
+            } else if (type == AUDIO) {
+                slideShowEditor.changeAudio(slideNum, uri);
+            } else {
+                result = UNSUPPORTED_TYPE;
+            }
+        } catch (MmsException e) {
+            Log.e(TAG, "internalChangeMedia:", e);
+            result = UNKNOWN_ERROR;
+        } catch (UnsupportContentTypeException e) {
+            Log.e(TAG, "internalChangeMedia:", e);
+            result = UNSUPPORTED_TYPE;
+        } catch (ExceedMessageSizeException e) {
+            Log.e(TAG, "internalChangeMedia:", e);
+            result = MESSAGE_SIZE_EXCEEDED;
+        } catch (ResolutionException e) {
+            Log.e(TAG, "internalChangeMedia:", e);
+            result = IMAGE_TOO_LARGE;
         }
+        return result;
     }
 
     /**
@@ -762,7 +825,9 @@ public class WorkingMessage {
         try {
             // Make sure we are saving to the correct thread ID.
             DraftCache.getInstance().setSavingDraft(true);
-            mConversation.ensureThreadId();
+            if (!mConversation.getRecipients().isEmpty()) {
+                mConversation.ensureThreadId();
+            }
             mConversation.setDraftState(true);
 
             PduPersister persister = PduPersister.getPduPersister(mActivity);
@@ -771,7 +836,7 @@ public class WorkingMessage {
             // If we don't already have a Uri lying around, make a new one.  If we do
             // have one already, make sure it is synced to disk.
             if (mMessageUri == null) {
-                mMessageUri = createDraftMmsMessage(persister, sendReq, mSlideshow);
+                mMessageUri = createDraftMmsMessage(persister, sendReq, mSlideshow, null);
             } else {
                 updateDraftMmsMessage(mMessageUri, persister, mSlideshow, sendReq);
             }
@@ -846,6 +911,8 @@ public class WorkingMessage {
 
         // Mark this message as discarded in order to make saveDraft() no-op.
         mDiscarded = true;
+
+        cancelThumbnailLoading();
 
         // Delete any associated drafts if there are any.
         if (mHasMmsDraft) {
@@ -1072,10 +1139,11 @@ public class WorkingMessage {
      * in mms_config.xml.
      */
     public void send(final String recipientsInUI) {
-        if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-            LogTag.debug("send");
-        }
         long origThreadId = mConversation.getThreadId();
+
+        if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
+            LogTag.debug("send origThreadId: " + origThreadId);
+        }
 
         removeSubjectIfEmpty(true /* notify */);
 
@@ -1093,7 +1161,7 @@ public class WorkingMessage {
                 String err = "WorkingMessage.send MMS sending failure. mms_config.xml is " +
                         "missing uaProfUrl setting.  uaProfUrl is required for MMS service, " +
                         "but can be absent for SMS.";
-                RuntimeException ex = new ContentRestrictionException(err);
+                RuntimeException ex = new NullPointerException(err);
                 Log.e(TAG, err, ex);
                 // now, let's just crash.
                 throw ex;
@@ -1108,8 +1176,13 @@ public class WorkingMessage {
             final SlideshowModel slideshow = mSlideshow;
             final CharSequence subject = mSubject;
 
+            if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
+                LogTag.debug("Send mmsUri: " + mmsUri);
+            }
+
             // Do the dirty work of sending the message off of the main UI thread.
             new Thread(new Runnable() {
+                @Override
                 public void run() {
                     final SendReq sendReq = makeSendReq(conv, subject);
 
@@ -1120,17 +1193,18 @@ public class WorkingMessage {
 
                     updateSendStats(conv);
                 }
-            }).start();
+            }, "WorkingMessage.send MMS").start();
         } else {
             // Same rules apply as above.
             final String msgText = mText.toString();
             new Thread(new Runnable() {
+                @Override
                 public void run() {
                     preSendSmsWorker(conv, msgText, recipientsInUI);
 
                     updateSendStats(conv);
                 }
-            }).start();
+            }, "WorkingMessage.send SMS").start();
         }
 
         // update the Recipient cache with the new to address, if it's different
@@ -1226,48 +1300,26 @@ public class WorkingMessage {
         }
 
         mStatusListener.onMessageSent();
+        MmsWidgetProvider.notifyDatasetChanged(mActivity);
     }
 
     private void sendMmsWorker(Conversation conv, Uri mmsUri, PduPersister persister,
-                               SlideshowModel slideshow, SendReq sendReq) {
-        // If user tries to send the message, it's a signal the inputted text is what they wanted.
-        UserHappinessSignals.userAcceptedImeText(mActivity);
-
-        // First make sure we don't have too many outstanding unsent message.
-        Cursor cursor = null;
-        try {
-            cursor = SqliteWrapper.query(mActivity, mContentResolver,
-                    Mms.Outbox.CONTENT_URI, MMS_OUTBOX_PROJECTION, null, null, null);
-            if (cursor != null) {
-                long maxMessageSize = MmsConfig.getMaxSizeScaleForPendingMmsAllowed() *
-                    MmsConfig.getMaxMessageSize();
-                long totalPendingSize = 0;
-                while (cursor.moveToNext()) {
-                    totalPendingSize += cursor.getLong(MMS_MESSAGE_SIZE_INDEX);
-                }
-                if (totalPendingSize >= maxMessageSize) {
-                    unDiscard();    // it wasn't successfully sent. Allow it to be saved as a draft.
-                    mStatusListener.onMaxPendingMessagesReached();
-                    return;
-                }
-            }
-        } finally {
-            if (cursor != null) {
-                cursor.close();
-            }
-        }
-        mStatusListener.onPreMessageSent();
+            SlideshowModel slideshow, SendReq sendReq) {
         long threadId = 0;
-
+        Cursor cursor = null;
+        boolean newMessage = false;
         try {
+            // Put a placeholder message in the database first
             DraftCache.getInstance().setSavingDraft(true);
+            mStatusListener.onPreMessageSent();
 
             // Make sure we are still using the correct thread ID for our
             // recipient set.
             threadId = conv.ensureThreadId();
 
             if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-                LogTag.debug("sendMmsWorker: update draft MMS message " + mmsUri);
+                LogTag.debug("sendMmsWorker: update draft MMS message " + mmsUri +
+                        " threadId: " + threadId);
             }
 
             // One last check to verify the address of the recipient.
@@ -1278,22 +1330,70 @@ public class WorkingMessage {
                 String newAddress =
                     Conversation.verifySingleRecipient(mActivity, conv.getThreadId(), dests[0]);
 
+                if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                    LogTag.debug("sendMmsWorker: newAddress " + newAddress +
+                            " dests[0]: " + dests[0]);
+                }
+
                 if (!newAddress.equals(dests[0])) {
                     dests[0] = newAddress;
                     EncodedStringValue[] encodedNumbers = EncodedStringValue.encodeStrings(dests);
                     if (encodedNumbers != null) {
+                        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                            LogTag.debug("sendMmsWorker: REPLACING number!!!");
+                        }
                         sendReq.setTo(encodedNumbers);
                     }
                 }
             }
+            newMessage = mmsUri == null;
+            if (newMessage) {
+                // Write something in the database so the new message will appear as sending
+                ContentValues values = new ContentValues();
+                values.put(Mms.MESSAGE_BOX, Mms.MESSAGE_BOX_OUTBOX);
+                values.put(Mms.THREAD_ID, threadId);
+                values.put(Mms.MESSAGE_TYPE, PduHeaders.MESSAGE_TYPE_SEND_REQ);
+                mmsUri = SqliteWrapper.insert(mActivity, mContentResolver, Mms.Outbox.CONTENT_URI,
+                        values);
+            }
+            mStatusListener.onMessageSent();
 
-            if (mmsUri == null) {
+            // If user tries to send the message, it's a signal the inputted text is
+            // what they wanted.
+            UserHappinessSignals.userAcceptedImeText(mActivity);
+
+            // First make sure we don't have too many outstanding unsent message.
+            cursor = SqliteWrapper.query(mActivity, mContentResolver,
+                    Mms.Outbox.CONTENT_URI, MMS_OUTBOX_PROJECTION, null, null, null);
+            if (cursor != null) {
+                long maxMessageSize = MmsConfig.getMaxSizeScaleForPendingMmsAllowed() *
+                MmsConfig.getMaxMessageSize();
+                long totalPendingSize = 0;
+                while (cursor.moveToNext()) {
+                    totalPendingSize += cursor.getLong(MMS_MESSAGE_SIZE_INDEX);
+                }
+                if (totalPendingSize >= maxMessageSize) {
+                    unDiscard();    // it wasn't successfully sent. Allow it to be saved as a draft.
+                    mStatusListener.onMaxPendingMessagesReached();
+                    markMmsMessageWithError(mmsUri);
+                    return;
+                }
+            }
+        } finally {
+            if (cursor != null) {
+                cursor.close();
+            }
+        }
+
+        try {
+            if (newMessage) {
                 // Create a new MMS message if one hasn't been made yet.
-                mmsUri = createDraftMmsMessage(persister, sendReq, slideshow);
+                mmsUri = createDraftMmsMessage(persister, sendReq, slideshow, mmsUri);
             } else {
                 // Otherwise, sync the MMS message in progress to disk.
                 updateDraftMmsMessage(mmsUri, persister, slideshow, sendReq);
             }
+
             // Be paranoid and clean any draft SMS up.
             deleteDraftSmsMessage(threadId);
         } finally {
@@ -1315,7 +1415,6 @@ public class WorkingMessage {
             mStatusListener.onAttachmentError(error);
             return;
         }
-
         MessageSender sender = new MmsMessageSender(mActivity, mmsUri,
                 slideshow.getCurrentMessageSize());
         try {
@@ -1330,8 +1429,7 @@ public class WorkingMessage {
         } catch (Exception e) {
             Log.e(TAG, "Failed to send message: " + mmsUri + ", threadId=" + threadId, e);
         }
-
-        mStatusListener.onMessageSent();
+        MmsWidgetProvider.notifyDatasetChanged(mActivity);
     }
 
     private void markMmsMessageWithError(Uri mmsUri) {
@@ -1424,11 +1522,14 @@ public class WorkingMessage {
     }
 
     private static Uri createDraftMmsMessage(PduPersister persister, SendReq sendReq,
-            SlideshowModel slideshow) {
+            SlideshowModel slideshow, Uri preUri) {
+        if (slideshow == null) {
+            return null;
+        }
         try {
             PduBody pb = slideshow.toPduBody();
             sendReq.setBody(pb);
-            Uri res = persister.persist(sendReq, Mms.Draft.CONTENT_URI);
+            Uri res = persister.persist(sendReq, preUri == null ? Mms.Draft.CONTENT_URI : preUri);
             slideshow.sync(pb);
             return res;
         } catch (MmsException e) {
@@ -1442,14 +1543,16 @@ public class WorkingMessage {
         }
 
         new Thread(new Runnable() {
+            @Override
             public void run() {
                 try {
                     DraftCache.getInstance().setSavingDraft(true);
+
                     final PduPersister persister = PduPersister.getPduPersister(mActivity);
                     final SendReq sendReq = makeSendReq(conv, mSubject);
 
                     if (mMessageUri == null) {
-                        mMessageUri = createDraftMmsMessage(persister, sendReq, mSlideshow);
+                        mMessageUri = createDraftMmsMessage(persister, sendReq, mSlideshow, null);
                     } else {
                         updateDraftMmsMessage(mMessageUri, persister, mSlideshow, sendReq);
                     }
@@ -1464,7 +1567,9 @@ public class WorkingMessage {
                         // thread.
                         conv.clearThreadId();   // force us to get the updated thread id
                     }
-                    conv.ensureThreadId();
+                    if (!conv.getRecipients().isEmpty()) {
+                        conv.ensureThreadId();
+                    }
                     conv.setDraftState(true);
                     if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
                         LogTag.debug("asyncUpdateDraftMmsMessage conv: " + conv +
@@ -1478,7 +1583,7 @@ public class WorkingMessage {
                     DraftCache.getInstance().setSavingDraft(false);
                 }
             }
-        }).start();
+        }, "WorkingMessage.asyncUpdateDraftMmsMessage").start();
     }
 
     private static void updateDraftMmsMessage(Uri uri, PduPersister persister,
@@ -1491,6 +1596,7 @@ public class WorkingMessage {
             return;
         }
         persister.updateHeaders(uri, sendReq);
+
         final PduBody pb = slideshow.toPduBody();
 
         try {
@@ -1568,9 +1674,16 @@ public class WorkingMessage {
 
     private void asyncUpdateDraftSmsMessage(final Conversation conv, final String contents) {
         new Thread(new Runnable() {
+            @Override
             public void run() {
                 try {
                     DraftCache.getInstance().setSavingDraft(true);
+                    if (conv.getRecipients().isEmpty()) {
+                        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                            LogTag.debug("asyncUpdateDraftSmsMessage no recipients, not saving");
+                        }
+                        return;
+                    }
                     long threadId = conv.ensureThreadId();
                     conv.setDraftState(true);
                     updateDraftSmsMessage(conv, contents);
@@ -1578,7 +1691,7 @@ public class WorkingMessage {
                     DraftCache.getInstance().setSavingDraft(false);
                 }
             }
-        }).start();
+        }, "WorkingMessage.asyncUpdateDraftSmsMessage").start();
     }
 
     private void updateDraftSmsMessage(final Conversation conv, String contents) {
@@ -1606,10 +1719,11 @@ public class WorkingMessage {
             LogTag.debug("asyncDelete %s where %s", uri, selection);
         }
         new Thread(new Runnable() {
+            @Override
             public void run() {
                 SqliteWrapper.delete(mActivity, mContentResolver, uri, selection, selectionArgs);
             }
-        }).start();
+        }, "WorkingMessage.asyncDelete").start();
     }
 
     public void asyncDeleteDraftSmsMessage(Conversation conv) {
@@ -1632,9 +1746,9 @@ public class WorkingMessage {
         mHasMmsDraft = false;
 
         final long threadId = conv.getThreadId();
-        if (threadId > 0) {
-            final String where = Mms.THREAD_ID + " = " + threadId;
-            asyncDelete(Mms.Draft.CONTENT_URI, where, null);
-        }
+        // If the thread id is < 1, then the thread_id in the pdu will be "" or NULL. We have
+        // to clear those messages as well as ones with a valid thread id.
+        final String where = Mms.THREAD_ID +  (threadId > 0 ? " = " + threadId : " IS NULL");
+        asyncDelete(Mms.Draft.CONTENT_URI, where, null);
     }
 }

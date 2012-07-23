@@ -32,6 +32,7 @@ import com.android.mms.model.TextModel;
 import com.android.mms.model.VideoModel;
 import com.android.mms.model.MediaModel.MediaAction;
 import com.android.mms.ui.AdaptableSlideViewInterface.OnSizeChangedListener;
+import com.android.mms.util.ItemLoadedCallback;
 
 import android.content.Context;
 import android.os.Handler;
@@ -49,8 +50,8 @@ public class SlideshowPresenter extends Presenter {
     protected int mLocation;
     protected final int mSlideNumber;
 
-    protected float mWidthTransformRatio;
-    protected float mHeightTransformRatio;
+    protected float mWidthTransformRatio = 1.0f;
+    protected float mHeightTransformRatio = 1.0f;
 
     // Since only the original thread that created a view hierarchy can touch
     // its views, we have to use Handler to manage the views in the some
@@ -112,7 +113,9 @@ public class SlideshowPresenter extends Presenter {
     }
 
     @Override
-    public void present() {
+    public void present(ItemLoadedCallback callback) {
+        // This is called to show a full-screen slideshow. Presently, all parts of
+        // a slideshow (images, sounds, etc.) are loaded and displayed on the UI thread.
         presentSlide((SlideViewInterface) mView, ((SlideshowModel) mModel).get(mLocation));
     }
 
@@ -123,29 +126,20 @@ public class SlideshowPresenter extends Presenter {
     protected void presentSlide(SlideViewInterface view, SlideModel model) {
         view.reset();
 
-        try {
-            for (MediaModel media : model) {
-                if (media instanceof RegionMediaModel) {
-                    presentRegionMedia(view, (RegionMediaModel) media, true);
-                } else if (media.isAudio()) {
-                    presentAudio(view, (AudioModel) media, true);
-                }
+        for (MediaModel media : model) {
+            if (media instanceof RegionMediaModel) {
+                presentRegionMedia(view, (RegionMediaModel) media, true);
+            } else if (media.isAudio()) {
+                presentAudio(view, (AudioModel) media, true);
             }
-        } catch (DrmException e) {
-            Log.e(TAG, e.getMessage(), e);
-            Toast.makeText(mContext,
-                    mContext.getString(R.string.insufficient_drm_rights),
-                    Toast.LENGTH_SHORT).show();
         }
     }
 
     /**
      * @param view
-     * @throws DrmException
      */
     protected void presentRegionMedia(SlideViewInterface view,
-            RegionMediaModel rMedia, boolean dataChanged)
-            throws DrmException {
+            RegionMediaModel rMedia, boolean dataChanged) {
         RegionModel r = (rMedia).getRegion();
         if (rMedia.isText()) {
             presentText(view, (TextModel) rMedia, r, dataChanged);
@@ -157,10 +151,10 @@ public class SlideshowPresenter extends Presenter {
     }
 
     protected void presentAudio(SlideViewInterface view, AudioModel audio,
-            boolean dataChanged) throws DrmException {
+            boolean dataChanged) {
         // Set audio only when data changed.
         if (dataChanged) {
-            view.setAudio(audio.getUriWithDrmCheck(), audio.getSrc(), audio.getExtras());
+            view.setAudio(audio.getUri(), audio.getSrc(), audio.getExtras());
         }
 
         MediaAction action = audio.getCurrentAction();
@@ -195,20 +189,29 @@ public class SlideshowPresenter extends Presenter {
      * @param view
      * @param image
      * @param r
-     * @throws DrmException
      */
     protected void presentImage(SlideViewInterface view, ImageModel image,
-            RegionModel r, boolean dataChanged) throws DrmException {
+            RegionModel r, boolean dataChanged) {
+        int transformedWidth = transformWidth(r.getWidth());
+        int transformedHeight = transformWidth(r.getHeight());
+
+        if (LOCAL_LOGV) {
+            Log.v(TAG, "presentImage r.getWidth: " + r.getWidth()
+                    + ", r.getHeight: " + r.getHeight() +
+                    " transformedWidth: " + transformedWidth +
+                    " transformedHeight: " + transformedHeight);
+        }
+
         if (dataChanged) {
-            view.setImage(image.getSrc(), image.getBitmapWithDrmCheck());
+            view.setImage(image.getSrc(), image.getBitmap(r.getWidth(), r.getHeight()));
         }
 
         if (view instanceof AdaptableSlideViewInterface) {
             ((AdaptableSlideViewInterface) view).setImageRegion(
                     transformWidth(r.getLeft()),
                     transformHeight(r.getTop()),
-                    transformWidth(r.getWidth()),
-                    transformHeight(r.getHeight()));
+                    transformedWidth,
+                    transformedHeight);
         }
         view.setImageRegionFit(r.getFit());
         view.setImageVisibility(image.isVisible());
@@ -218,15 +221,14 @@ public class SlideshowPresenter extends Presenter {
      * @param view
      * @param video
      * @param r
-     * @throws DrmException
      */
     protected void presentVideo(SlideViewInterface view, VideoModel video,
-            RegionModel r, boolean dataChanged) throws DrmException {
+            RegionModel r, boolean dataChanged) {
         if (dataChanged) {
-            view.setVideo(video.getSrc(), video.getUriWithDrmCheck());
+            view.setVideo(video.getSrc(), video.getUri());
         }
 
-        if (view instanceof AdaptableSlideViewInterface) {
+            if (view instanceof AdaptableSlideViewInterface) {
             ((AdaptableSlideViewInterface) view).setVideoRegion(
                     transformWidth(r.getLeft()),
                     transformHeight(r.getTop()),
@@ -291,32 +293,23 @@ public class SlideshowPresenter extends Presenter {
             if (model instanceof RegionMediaModel) {
                 mHandler.post(new Runnable() {
                     public void run() {
-                        try {
-                            presentRegionMedia(view, (RegionMediaModel) model, dataChanged);
-                        } catch (DrmException e) {
-                            Log.e(TAG, e.getMessage(), e);
-                            Toast.makeText(mContext,
-                                    mContext.getString(R.string.insufficient_drm_rights),
-                                    Toast.LENGTH_SHORT).show();
-                        }
+                        presentRegionMedia(view, (RegionMediaModel) model, dataChanged);
                     }
                 });
             } else if (((MediaModel) model).isAudio()) {
                 mHandler.post(new Runnable() {
                     public void run() {
-                        try {
-                            presentAudio(view, (AudioModel) model, dataChanged);
-                        } catch (DrmException e) {
-                            Log.e(TAG, e.getMessage(), e);
-                            Toast.makeText(mContext,
-                                    mContext.getString(R.string.insufficient_drm_rights),
-                                    Toast.LENGTH_SHORT).show();
-                        }
+                        presentAudio(view, (AudioModel) model, dataChanged);
                     }
                 });
             }
         } else if (model instanceof RegionModel) {
             // TODO:
         }
+    }
+
+    @Override
+    public void cancelBackgroundLoading() {
+        // For now, the SlideshowPresenter does no background loading so there is nothing to cancel.
     }
 }

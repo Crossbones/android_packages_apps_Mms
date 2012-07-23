@@ -39,6 +39,7 @@ import android.content.Context;
 import android.content.Intent;
 import android.content.IntentFilter;
 import android.database.Cursor;
+import android.database.sqlite.SqliteWrapper;
 import android.net.ConnectivityManager;
 import android.net.NetworkInfo;
 import android.net.Uri;
@@ -116,6 +117,7 @@ public class TransactionService extends Service implements Observer {
     private static final int EVENT_TRANSACTION_REQUEST = 1;
     private static final int EVENT_CONTINUE_MMS_CONNECTIVITY = 3;
     private static final int EVENT_HANDLE_NEXT_PENDING_TRANSACTION = 4;
+    private static final int EVENT_NEW_INTENT = 5;
     private static final int EVENT_QUIT = 100;
 
     private static final int TOAST_MSG_QUEUED = 1;
@@ -147,7 +149,7 @@ public class TransactionService extends Service implements Observer {
             }
 
             if (str != null) {
-            Toast.makeText(TransactionService.this, str,
+                Toast.makeText(TransactionService.this, str,
                         Toast.LENGTH_LONG).show();
             }
         }
@@ -176,14 +178,22 @@ public class TransactionService extends Service implements Observer {
 
     @Override
     public int onStartCommand(Intent intent, int flags, int startId) {
-        if (intent == null) {
-            return Service.START_NOT_STICKY;
+        if (intent != null) {
+            Message msg = mServiceHandler.obtainMessage(EVENT_NEW_INTENT);
+            msg.arg1 = startId;
+            msg.obj = intent;
+            mServiceHandler.sendMessage(msg);
         }
+        return Service.START_NOT_STICKY;
+    }
+
+    public void onNewIntent(Intent intent, int serviceId) {
         mConnMgr = (ConnectivityManager) getSystemService(Context.CONNECTIVITY_SERVICE);
         boolean noNetwork = !isNetworkAvailable();
 
         if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-            Log.v(TAG, "onStart: #" + startId + ": " + intent.getExtras() + " intent=" + intent);
+            Log.v(TAG, "onNewIntent: serviceId: " + serviceId + ": " + intent.getExtras() +
+                    " intent=" + intent);
             Log.v(TAG, "    networkAvailable=" + !noNetwork);
         }
 
@@ -196,16 +206,16 @@ public class TransactionService extends Service implements Observer {
                     int count = cursor.getCount();
 
                     if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-                        Log.v(TAG, "onStart: cursor.count=" + count);
+                        Log.v(TAG, "onNewIntent: cursor.count=" + count);
                     }
 
                     if (count == 0) {
                         if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-                            Log.v(TAG, "onStart: no pending messages. Stopping service.");
+                            Log.v(TAG, "onNewIntent: no pending messages. Stopping service.");
                         }
                         RetryScheduler.setRetryAlarm(this);
-                        stopSelfIfIdle(startId);
-                        return Service.START_NOT_STICKY;
+                        stopSelfIfIdle(serviceId);
+                        return;
                     }
 
                     int columnIndexOfMsgId = cursor.getColumnIndexOrThrow(PendingMessages.MSG_ID);
@@ -215,7 +225,7 @@ public class TransactionService extends Service implements Observer {
                     if (noNetwork) {
                         // Make sure we register for connection state changes.
                         if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-                            Log.v(TAG, "onStart: registerForConnectionStateChanges");
+                            Log.v(TAG, "onNewIntent: registerForConnectionStateChanges");
                         }
                         MmsSystemEventReceiver.registerForConnectionStateChanges(
                                 getApplicationContext());
@@ -225,8 +235,8 @@ public class TransactionService extends Service implements Observer {
                         int msgType = cursor.getInt(columnIndexOfMsgType);
                         int transactionType = getTransactionType(msgType);
                         if (noNetwork) {
-                            onNetworkUnavailable(startId, transactionType);
-                            return Service.START_NOT_STICKY;
+                            onNetworkUnavailable(serviceId, transactionType);
+                            return;
                         }
                         switch (transactionType) {
                             case -1:
@@ -249,7 +259,7 @@ public class TransactionService extends Service implements Observer {
                                 TransactionBundle args = new TransactionBundle(
                                         transactionType, uri.toString());
                                 // FIXME: We use the same startId for all MMs.
-                                launchTransaction(startId, args, false);
+                                launchTransaction(serviceId, args, false);
                                 break;
                         }
                     }
@@ -258,20 +268,19 @@ public class TransactionService extends Service implements Observer {
                 }
             } else {
                 if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-                    Log.v(TAG, "onStart: no pending messages. Stopping service.");
+                    Log.v(TAG, "onNewIntent: no pending messages. Stopping service.");
                 }
                 RetryScheduler.setRetryAlarm(this);
-                stopSelfIfIdle(startId);
+                stopSelfIfIdle(serviceId);
             }
         } else {
             if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
-                Log.v(TAG, "onStart: launch transaction...");
+                Log.v(TAG, "onNewIntent: launch transaction...");
             }
             // For launching NotificationTransaction and test purpose.
             TransactionBundle args = new TransactionBundle(intent.getExtras());
-            launchTransaction(startId, args, noNetwork);
+            launchTransaction(serviceId, args, noNetwork);
         }
-        return Service.START_NOT_STICKY;
     }
 
     private void stopSelfIfIdle(int startId) {
@@ -418,7 +427,10 @@ public class TransactionService extends Service implements Observer {
                         case Transaction.RETRIEVE_TRANSACTION:
                             // We're already in a non-UI thread called from
                             // NotificationTransacation.run(), so ok to block here.
-                            MessagingNotification.blockingUpdateNewMessageIndicator(this, true,
+                            long threadId = MessagingNotification.getThreadId(
+                                    this, state.getContentUri());
+                            MessagingNotification.blockingUpdateNewMessageIndicator(this,
+                                    threadId,
                                     false);
                             MessagingNotification.updateDownloadFailedNotification(this);
                             break;
@@ -527,6 +539,8 @@ public class TransactionService extends Service implements Observer {
                 return "EVENT_TRANSACTION_REQUEST";
             } else if (msg.what == EVENT_HANDLE_NEXT_PENDING_TRANSACTION) {
                 return "EVENT_HANDLE_NEXT_PENDING_TRANSACTION";
+            } else if (msg.what == EVENT_NEW_INTENT) {
+                return "EVENT_NEW_INTENT";
             }
             return "unknown message.what";
         }
@@ -558,6 +572,10 @@ public class TransactionService extends Service implements Observer {
             Transaction transaction = null;
 
             switch (msg.what) {
+                case EVENT_NEW_INTENT:
+                    onNewIntent((Intent)msg.obj, msg.arg1);
+                    break;
+
                 case EVENT_QUIT:
                     getLooper().quit();
                     return;

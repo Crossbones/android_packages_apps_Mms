@@ -61,12 +61,19 @@ public class TransactionSettings {
      * @param context The context of the MMS Client
      */
     public TransactionSettings(Context context, String apnName) {
-        String selection = TextUtils.isEmpty(apnName) ? null :
-                Telephony.Carriers.APN + "='" + apnName.trim() + "'";
+        if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
+            Log.v(TAG, "TransactionSettings: apnName: " + apnName);
+        }
+        String selection = Telephony.Carriers.CURRENT + " IS NOT NULL";
+        String[] selectionArgs = null;
+        if (!TextUtils.isEmpty(apnName)) {
+            selection += " AND " + Telephony.Carriers.APN + "=?";
+            selectionArgs = new String[]{ apnName.trim() };
+        }
 
         Cursor cursor = SqliteWrapper.query(context, context.getContentResolver(),
-                            Uri.withAppendedPath(Telephony.Carriers.CONTENT_URI, "current"),
-                            APN_PROJECTION, selection, null, null);
+                            Telephony.Carriers.CONTENT_URI,
+                            APN_PROJECTION, selection, selectionArgs, null);
 
         if (Log.isLoggable(LogTag.TRANSACTION, Log.VERBOSE)) {
             Log.v(TAG, "TransactionSettings looking for apn: " + selection + " returned: " +

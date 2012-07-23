@@ -20,14 +20,14 @@ package com.android.mms.model;
 import com.android.mms.ContentRestrictionException;
 import com.android.mms.ExceedMessageSizeException;
 import com.android.mms.LogTag;
+import com.android.mms.MmsApp;
 import com.android.mms.MmsConfig;
 import com.android.mms.dom.smil.SmilMediaElementImpl;
-import android.drm.mobile1.DrmException;
-import com.android.mms.drm.DrmWrapper;
 import com.android.mms.ui.UriImage;
-import com.android.mms.ui.MessageUtils;
+import com.android.mms.util.ItemLoadedCallback;
+import com.android.mms.util.ItemLoadedFuture;
+import com.android.mms.util.ThumbnailManager;
 
-import com.google.android.mms.ContentType;
 import com.google.android.mms.MmsException;
 import com.google.android.mms.pdu.PduPart;
 import com.google.android.mms.pdu.PduPersister;
@@ -42,9 +42,7 @@ import android.net.Uri;
 import android.text.TextUtils;
 import android.util.Log;
 
-import java.io.FileNotFoundException;
 import java.io.IOException;
-import java.io.InputStream;
 import java.lang.ref.SoftReference;
 import java.util.Arrays;
 import java.util.HashSet;
@@ -52,12 +50,11 @@ import java.util.Set;
 
 
 public class ImageModel extends RegionMediaModel {
-    @SuppressWarnings("hiding")
     private static final String TAG = "Mms/image";
     private static final boolean DEBUG = false;
     private static final boolean LOCAL_LOGV = false;
 
-    private static final int THUMBNAIL_BOUNDS_LIMIT = 480;
+    private static final int PICTURE_SIZE_LIMIT = 100 * 1024;
 
     /**
      * These are the image content types that MMS supports. Anything else needs to be transcoded
@@ -70,7 +67,8 @@ public class ImageModel extends RegionMediaModel {
 
     private int mWidth;
     private int mHeight;
-    private SoftReference<Bitmap> mBitmapCache = new SoftReference<Bitmap>(null);
+    private SoftReference<Bitmap> mFullSizeBitmapCache = new SoftReference<Bitmap>(null);
+    private ItemLoadedFuture mItemLoadedFuture;
 
     public ImageModel(Context context, Uri uri, RegionModel region)
             throws MmsException {
@@ -80,16 +78,10 @@ public class ImageModel extends RegionMediaModel {
     }
 
     public ImageModel(Context context, String contentType, String src,
-            Uri uri, RegionModel region) throws DrmException, MmsException {
+            Uri uri, RegionModel region) throws MmsException {
         super(context, SmilHelper.ELEMENT_TAG_IMAGE,
                 contentType, src, uri, region);
-        decodeImageBounds();
-    }
-
-    public ImageModel(Context context, String contentType, String src,
-            DrmWrapper wrapper, RegionModel regionModel) throws IOException {
-        super(context, SmilHelper.ELEMENT_TAG_IMAGE, contentType, src,
-                wrapper, regionModel);
+        decodeImageBounds(uri);
     }
 
     private void initModelFromUri(Uri uri) throws MmsException {
@@ -111,8 +103,8 @@ public class ImageModel extends RegionMediaModel {
         }
     }
 
-    private void decodeImageBounds() throws DrmException {
-        UriImage uriImage = new UriImage(mContext, getUriWithDrmCheck());
+    private void decodeImageBounds(Uri uri) {
+        UriImage uriImage = new UriImage(mContext, uri);
         mWidth = uriImage.getWidth();
         mHeight = uriImage.getHeight();
 
@@ -146,21 +138,38 @@ public class ImageModel extends RegionMediaModel {
         cr.checkImageContentType(mContentType);
     }
 
-    public Bitmap getBitmap() {
-        return internalGetBitmap(getUri());
+    public ItemLoadedFuture loadThumbnailBitmap(ItemLoadedCallback callback) {
+        ThumbnailManager thumbnailManager = MmsApp.getApplication().getThumbnailManager();
+        mItemLoadedFuture = thumbnailManager.getThumbnail(getUri(), callback);
+        return mItemLoadedFuture;
     }
 
-    public Bitmap getBitmapWithDrmCheck() throws DrmException {
-        return internalGetBitmap(getUriWithDrmCheck());
+    public void cancelThumbnailLoading() {
+        if (mItemLoadedFuture != null) {
+            if (Log.isLoggable(LogTag.APP, Log.DEBUG)) {
+                Log.v(TAG, "cancelThumbnailLoading for: " + this);
+            }
+            mItemLoadedFuture.cancel();
+            mItemLoadedFuture = null;
+        }
     }
 
-    private Bitmap internalGetBitmap(Uri uri) {
-        Bitmap bm = mBitmapCache.get();
+    private Bitmap createBitmap(int thumbnailBoundsLimit, Uri uri) {
+        byte[] data = UriImage.getResizedImageData(mWidth, mHeight,
+                thumbnailBoundsLimit, thumbnailBoundsLimit, PICTURE_SIZE_LIMIT, uri, mContext);
+        if (LOCAL_LOGV) {
+            Log.v(TAG, "createBitmap size: " + (data == null ? data : data.length));
+        }
+        return data == null ? null : BitmapFactory.decodeByteArray(data, 0, data.length);
+    }
+
+    public Bitmap getBitmap(int width, int height)  {
+        Bitmap bm = mFullSizeBitmapCache.get();
         if (bm == null) {
             try {
-                bm = createThumbnailBitmap(THUMBNAIL_BOUNDS_LIMIT, uri);
+                bm = createBitmap(Math.max(width, height), getUri());
                 if (bm != null) {
-                    mBitmapCache = new SoftReference<Bitmap>(bm);
+                    mFullSizeBitmapCache = new SoftReference<Bitmap>(bm);
                 }
             } catch (OutOfMemoryError ex) {
                 // fall through and return a null bitmap. The callers can handle a null
@@ -168,45 +177,6 @@ public class ImageModel extends RegionMediaModel {
             }
         }
         return bm;
-    }
-
-    private Bitmap createThumbnailBitmap(int thumbnailBoundsLimit, Uri uri) {
-        int outWidth = mWidth;
-        int outHeight = mHeight;
-
-        int s = 1;
-        while ((outWidth / s > thumbnailBoundsLimit)
-                || (outHeight / s > thumbnailBoundsLimit)) {
-            s *= 2;
-        }
-        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-            Log.v(TAG, "createThumbnailBitmap: scale=" + s + ", w=" + outWidth / s
-                    + ", h=" + outHeight / s);
-        }
-        BitmapFactory.Options options = new BitmapFactory.Options();
-        options.inSampleSize = s;
-
-        InputStream input = null;
-        try {
-            input = mContext.getContentResolver().openInputStream(uri);
-            return BitmapFactory.decodeStream(input, null, options);
-        } catch (FileNotFoundException e) {
-            Log.e(TAG, e.getMessage(), e);
-            return null;
-        } catch (OutOfMemoryError ex) {
-            if (DEBUG) {
-                MessageUtils.writeHprofDataToFile();
-            }
-            throw ex;
-        } finally {
-            if (input != null) {
-                try {
-                    input.close();
-                } catch (IOException e) {
-                    Log.e(TAG, e.getMessage(), e);
-                }
-            }
-        }
     }
 
     @Override

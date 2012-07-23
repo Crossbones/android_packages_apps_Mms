@@ -17,6 +17,7 @@
 
 package com.android.mms.transaction;
 
+import com.android.mms.LogTag;
 import com.android.mms.ui.MessagingPreferenceActivity;
 import com.android.mms.util.SendingProgressTokenManager;
 import com.google.android.mms.InvalidHeaderValueException;
@@ -27,14 +28,20 @@ import com.google.android.mms.pdu.PduHeaders;
 import com.google.android.mms.pdu.PduPersister;
 import com.google.android.mms.pdu.ReadRecInd;
 import com.google.android.mms.pdu.SendReq;
+import com.google.android.mms.util.SqliteWrapper;
 
 import android.content.ContentUris;
+import android.content.ContentValues;
 import android.content.Context;
 import android.content.Intent;
 import android.content.SharedPreferences;
 import android.net.Uri;
 import android.preference.PreferenceManager;
 import android.provider.Telephony.Mms;
+import android.provider.Telephony.MmsSms;
+import android.provider.Telephony.Sms;
+import android.provider.Telephony.Mms.Addr;
+import android.provider.Telephony.MmsSms.PendingMessages;
 import android.util.Log;
 
 public class MmsMessageSender implements MessageSender {
@@ -63,6 +70,9 @@ public class MmsMessageSender implements MessageSender {
 
     public boolean sendMessage(long token) throws MmsException {
         // Load the MMS from the message uri
+        if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+            LogTag.debug("sendMessage uri: " + mMessageUri);
+        }
         PduPersister p = PduPersister.getPduPersister(mContext);
         GenericPdu pdu = p.load(mMessageUri);
 
@@ -80,16 +90,38 @@ public class MmsMessageSender implements MessageSender {
 
         // Update the 'date' field of the message before sending it.
         sendReq.setDate(System.currentTimeMillis() / 1000L);
-        
+
         sendReq.setMessageSize(mMessageSize);
 
         p.updateHeaders(mMessageUri, sendReq);
 
-        // Move the message into MMS Outbox
-        p.move(mMessageUri, Mms.Outbox.CONTENT_URI);
+        long messageId = ContentUris.parseId(mMessageUri);
+
+        // Move the message into MMS Outbox.
+        if (!mMessageUri.toString().startsWith(Mms.Draft.CONTENT_URI.toString())) {
+            // If the message is already in the outbox (most likely because we created a "primed"
+            // message in the outbox when the user hit send), then we have to manually put an
+            // entry in the pending_msgs table which is where TransacationService looks for
+            // messages to send. Normally, the entry in pending_msgs is created by the trigger:
+            // insert_mms_pending_on_update, when a message is moved from drafts to the outbox.
+            ContentValues values = new ContentValues(7);
+
+            values.put(PendingMessages.PROTO_TYPE, MmsSms.MMS_PROTO);
+            values.put(PendingMessages.MSG_ID, messageId);
+            values.put(PendingMessages.MSG_TYPE, pdu.getMessageType());
+            values.put(PendingMessages.ERROR_TYPE, 0);
+            values.put(PendingMessages.ERROR_CODE, 0);
+            values.put(PendingMessages.RETRY_INDEX, 0);
+            values.put(PendingMessages.DUE_TIME, 0);
+
+            SqliteWrapper.insert(mContext, mContext.getContentResolver(),
+                    PendingMessages.CONTENT_URI, values);
+        } else {
+            p.move(mMessageUri, Mms.Outbox.CONTENT_URI);
+        }
 
         // Start MMS transaction service
-        SendingProgressTokenManager.put(ContentUris.parseId(mMessageUri), token);
+        SendingProgressTokenManager.put(messageId, token);
         mContext.startService(new Intent(mContext, TransactionService.class));
 
         return true;

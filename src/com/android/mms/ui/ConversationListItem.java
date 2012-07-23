@@ -17,6 +17,7 @@
 
 package com.android.mms.ui;
 
+import com.android.mms.LogTag;
 import com.android.mms.R;
 import com.android.mms.data.Contact;
 import com.android.mms.data.ContactList;
@@ -36,6 +37,7 @@ import android.text.style.TextAppearanceSpan;
 import android.util.AttributeSet;
 import android.util.Log;
 import android.view.View;
+import android.widget.Checkable;
 import android.widget.QuickContactBadge;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
@@ -43,7 +45,8 @@ import android.widget.TextView;
 /**
  * This class manages the view for given conversation.
  */
-public class ConversationListItem extends RelativeLayout implements Contact.UpdateListener {
+public class ConversationListItem extends RelativeLayout implements Contact.UpdateListener,
+            Checkable {
     private static final String TAG = "ConversationListItem";
     private static final boolean DEBUG = false;
 
@@ -61,7 +64,7 @@ public class ConversationListItem extends RelativeLayout implements Contact.Upda
 
     private Conversation mConversation;
 
-    private static final StyleSpan STYLE_BOLD = new StyleSpan(Typeface.BOLD);
+    public static final StyleSpan STYLE_BOLD = new StyleSpan(Typeface.BOLD);
 
     public ConversationListItem(Context context) {
         super(context);
@@ -161,6 +164,9 @@ public class ConversationListItem extends RelativeLayout implements Contact.Upda
     }
 
     public void onUpdate(Contact updated) {
+        if (Log.isLoggable(LogTag.CONTACT, Log.DEBUG)) {
+            Log.v(TAG, "onUpdate: " + this + " contact: " + updated);
+        }
         mHandler.post(new Runnable() {
             public void run() {
                 updateFromView();
@@ -173,17 +179,7 @@ public class ConversationListItem extends RelativeLayout implements Contact.Upda
 
         mConversation = conversation;
 
-        int backgroundId;
-        if (conversation.isChecked()) {
-            backgroundId = R.drawable.list_selected_holo_light;
-        } else if (conversation.hasUnreadMessages()) {
-            backgroundId = R.drawable.conversation_item_background_unread;
-        } else {
-            backgroundId = R.drawable.conversation_item_background_read;
-        }
-        Drawable background = mContext.getResources().getDrawable(backgroundId);
-
-        setBackgroundDrawable(background);
+        updateBackground();
 
         LayoutParams attachmentLayout = (LayoutParams)mAttachmentView.getLayoutParams();
         boolean hasError = conversation.hasError();
@@ -208,7 +204,9 @@ public class ConversationListItem extends RelativeLayout implements Contact.Upda
         // Register for updates in changes of any of the contacts in this conversation.
         ContactList contacts = conversation.getRecipients();
 
-        if (DEBUG) Log.v(TAG, "bind: contacts.addListeners " + this);
+        if (Log.isLoggable(LogTag.CONTACT, Log.DEBUG)) {
+            Log.v(TAG, "bind: contacts.addListeners " + this);
+        }
         Contact.addListener(this);
 
         // Subject
@@ -225,9 +223,37 @@ public class ConversationListItem extends RelativeLayout implements Contact.Upda
         updateAvatarView();
     }
 
+    private void updateBackground() {
+        int backgroundId;
+        if (mConversation.isChecked()) {
+            backgroundId = R.drawable.list_selected_holo_light;
+        } else if (mConversation.hasUnreadMessages()) {
+            backgroundId = R.drawable.conversation_item_background_unread;
+        } else {
+            backgroundId = R.drawable.conversation_item_background_read;
+        }
+        Drawable background = mContext.getResources().getDrawable(backgroundId);
+        setBackground(background);
+    }
+
     public final void unbind() {
-        if (DEBUG) Log.v(TAG, "unbind: contacts.removeListeners " + this);
+        if (Log.isLoggable(LogTag.CONTACT, Log.DEBUG)) {
+            Log.v(TAG, "unbind: contacts.removeListeners " + this);
+        }
         // Unregister contact update callbacks.
         Contact.removeListener(this);
+    }
+
+    public void setChecked(boolean checked) {
+        mConversation.setIsChecked(checked);
+        updateBackground();
+    }
+
+    public boolean isChecked() {
+        return mConversation.isChecked();
+    }
+
+    public void toggle() {
+        mConversation.setIsChecked(!mConversation.isChecked());
     }
 }

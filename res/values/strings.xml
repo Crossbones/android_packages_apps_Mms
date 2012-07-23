@@ -52,6 +52,9 @@
     <!-- Message that appears on screen while SIM card messages are retrieved -->
     <string name="refreshing">Refreshing\u2026</string>
 
+    <!-- Menu item to show received cell broadcasts. [CHAR LIMIT=30] -->
+    <string name="menu_cell_broadcasts">Cell broadcasts</string>
+
     <!-- Tag appearing on conversations in the conversation list that contain a draft message -->
     <string name="has_draft">Draft</string>
 
@@ -185,8 +188,6 @@
     <string name="resize_image_error_information">This picture is too large to send, even when resized.</string>
     <!-- String prepended to forwarded messages to indicate they were forwarded -->
     <string name="forward_prefix">Fwd:\u0020</string>
-    <!-- Dialog box title that appears when a draft message will not be saved due to invalid recipients -->
-    <string name="discard_message">Discard</string>
     <!-- Dialog message text explaining that a draft message will not be saved due to invalid recipients -->
     <string name="discard_message_reason">Your message will be discarded because it has no valid recipients.</string>
     <!-- Dialog box title indicating which recipients are invalid when the user tries to send a message with invalid recipients -->
@@ -225,10 +226,12 @@
     <string name="too_many_recipients">Message has too many recipients (<xliff:g id="currentCount">%1$s</xliff:g>). There is a limit of <xliff:g id="maxLimit">%2$s</xliff:g> recipients.</string>
     <!-- Brief message that appears when too many videos/pictures are imported -->
     <string name="too_many_attachments">There is a limit of <xliff:g id="maxLimit">%1$s</xliff:g> attachments. Only the first <xliff:g id="currentCount">%2$s</xliff:g> will be added.</string>
-    <!-- Alert dialog title when adding attachments is taking a while -->
+    <!-- Alert dialog title when adding attachments is taking a while  [CHAR LIMIT=none] -->
     <string name="adding_attachments_title">Adding attachments</string>
     <!-- Alert dialog when adding attachments is taking a while -->
     <string name="adding_attachments">Wait while the items are added to the slideshow.</string>
+    <!-- Alert dialog title when creating a slideshow [CHAR LIMIT=none] -->
+    <string name="building_slideshow_title">Building slideshow</string>
 
     <!-- Error message indicating that an audio attachment cannot be played -->
     <string name="cannot_play_audio">Can\'t play audio.</string>
@@ -426,6 +429,8 @@
     <string name="select_conversations">Choose conversations</string>
     <!-- Show this in the middle of the main activity when there are no conversations [CHAR LIMIT=none] -->
     <string name="no_conversations">No conversations.</string>
+    <!-- Show this in the middle of the main activity when loading conversations [CHAR LIMIT=none] -->
+    <string name="loading_conversations">Loading conversations.</string>
 
     <!-- When the user tries to view message details and some error occurs while
          retrieving those details, this message will be shown. -->
@@ -516,6 +521,8 @@
     <string name="recipient_label">Recipient:\u0020</string>
     <!-- Label in "Report" window -->
     <string name="status_label">Status:\u0020</string>
+    <!-- Label in "Report" window [CHAR LIMIT=50]-->
+    <string name="delivered_label">Delivered:\u0020</string>
 
 
     <!-- Attachment Type Selector Adapter. This string is an option in the "Attach" dialog, "Add music" dialog -->
@@ -740,6 +747,17 @@
          the number of messages in the thread [CHAR LIMIT=5] -->
     <string name="message_count_format">\u00a0<xliff:g id="number" example="1">%1$s</xliff:g></string>
 
+    <!-- When showing a multi-message notification, this is the title [CHAR LIMIT=none] -->
+    <string name="message_count_notification"><xliff:g id="number" example="3">%1$s</xliff:g> new messages</string>
+    <!-- In digest notifications when we show N messages, but there are N+M outstanding messages,
+         this text is displayed at the bottom of the notification. [CHAR LIMIT=50] -->
+    <plurals name="message_count_notification_overflow">
+        <!-- Case of 1 result. -->
+        <item quantity="one">+<xliff:g id="number" example="1">%1$s</xliff:g> other message"</item>
+        <!-- Case of 2 or more results. -->
+        <item quantity="other">+<xliff:g id="number" example="15">%1$s</xliff:g> other messages"</item>
+    </plurals>
+
     <!-- For debugging: Dialog box title indicating there's a situation where data has unexpectedly
          changed -->
     <string name="error_state">Inconsistent state</string>
@@ -756,6 +774,24 @@
 
     <!-- Message of the dialog used to disable messaging notifications [CHAR LIMIT=none] -->
     <string name="disable_notifications_dialog_message">Stop duplicate text message notifications from default Messaging app?</string>
+
+    <!-- Displayed at the end of the conversation list in the widget. Tapping on this will open the default conversation list. [CHAR LIMIT=35] -->
+    <string name="view_more_conversations">View more conversations</string>
+
+    <!-- Attachment type shown in notification. [CHAR LIMIT=35] -->
+    <string name="attachment_audio">Audio</string>
+    <!-- Attachment type shown in notification. [CHAR LIMIT=35] -->
+    <string name="attachment_slideshow">Slideshow</string>
+    <!-- Attachment type shown in notification. [CHAR LIMIT=35] -->
+    <string name="attachment_video">Video</string>
+    <!-- Attachment type shown in notification. [CHAR LIMIT=35] -->
+    <string name="attachment_picture">Picture</string>
+
+    <!-- Separator between parts of a notification in each line of an inboxStyle notification. [CHAR LIMIT=2] -->
+    <string name="notification_separator">\u0020\u0020</string>
+
+    <!-- An enumeration comma for separating multiple names in notifications. [CHAR LIMIT=2] -->
+    <string name="enumeration_comma">,\u0020</string>
 
 </resources>
 

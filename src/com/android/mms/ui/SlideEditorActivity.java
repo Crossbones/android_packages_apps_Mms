@@ -127,6 +127,7 @@ public class SlideEditorActivity extends Activity {
     private Uri mUri;
 
     private final static String MESSAGE_URI = "message_uri";
+    private AsyncDialog mAsyncDialog;   // Used for background tasks.
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -210,6 +211,11 @@ public class SlideEditorActivity extends Activity {
     @Override
     protected void onPause()  {
         super.onPause();
+
+        // remove any callback to display a progress spinner
+        if (mAsyncDialog != null) {
+            mAsyncDialog.clearPendingProgressDialog();
+        }
 
         synchronized (this) {
             if (mDirty) {
@@ -318,8 +324,16 @@ public class SlideEditorActivity extends Activity {
         }
     };
 
+    private AsyncDialog getAsyncDialog() {
+        if (mAsyncDialog == null) {
+            mAsyncDialog = new AsyncDialog(this);
+        }
+        return mAsyncDialog;
+    }
+
     private void previewSlideshow() {
-        MessageUtils.viewMmsMessageAttachment(SlideEditorActivity.this, mUri, mSlideshowModel);
+        MessageUtils.viewMmsMessageAttachment(SlideEditorActivity.this, mUri, mSlideshowModel,
+                getAsyncDialog());
     }
 
     private void updateTitle() {
@@ -430,11 +444,7 @@ public class SlideEditorActivity extends Activity {
                 break;
 
             case MENU_TAKE_PICTURE:
-                intent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                // We have to pass a uri to store the picture data, otherwise the camera will return
-                // a very small image bitmap.
-                intent.putExtra(MediaStore.EXTRA_OUTPUT, TempFileProvider.SCRAP_CONTENT_URI);
-                startActivityForResult(intent, REQUEST_CODE_TAKE_PICTURE);
+                MessageUtils.capturePicture(this, REQUEST_CODE_TAKE_PICTURE);
                 break;
 
             case MENU_DEL_PICTURE:
@@ -589,6 +599,9 @@ public class SlideEditorActivity extends Activity {
                     if (pictureUri == null) {
                         showError = true;
                     } else {
+                        // Remove the old captured picture's thumbnail from the cache
+                        MmsApp.getApplication().getThumbnailManager().removeThumbnail(pictureUri);
+
                         mSlideshowEditor.changeImage(mPosition, pictureUri);
                         setReplaceButtonText(R.string.replace_image);
                     }
@@ -785,7 +798,7 @@ public class SlideEditorActivity extends Activity {
 
     private void showCurrentSlide() {
         mPresenter.setLocation(mPosition);
-        mPresenter.present();
+        mPresenter.present(null);
         updateTitle();
 
         if (mSlideshowModel.get(mPosition).hasImage()) {

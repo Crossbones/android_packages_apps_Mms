@@ -40,6 +40,7 @@ import java.io.ByteArrayOutputStream;
 import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.InputStream;
+import java.io.OutputStream;
 
 public class UriImage {
     private static final String TAG = "Mms/image";
@@ -65,18 +66,6 @@ public class UriImage {
         } else if (uri.getScheme().equals("file")) {
             initFromFile(context, uri);
         }
-
-        mSrc = mPath.substring(mPath.lastIndexOf('/') + 1);
-
-        if(mSrc.startsWith(".") && mSrc.length() > 1) {
-            mSrc = mSrc.substring(1);
-        }
-
-        // Some MMSCs appear to have problems with filenames
-        // containing a space.  So just replace them with
-        // underscores in the name, which is typically not
-        // visible to the user anyway.
-        mSrc = mSrc.replace(' ', '_');
 
         mContext = context;
         mUri = uri;
@@ -104,12 +93,29 @@ public class UriImage {
         mContentType = mimeTypeMap.getMimeTypeFromExtension(extension);
         // It's ok if mContentType is null. Eventually we'll show a toast telling the
         // user the picture couldn't be attached.
+
+        buildSrcFromPath();
+    }
+
+    private void buildSrcFromPath() {
+        mSrc = mPath.substring(mPath.lastIndexOf('/') + 1);
+
+        if(mSrc.startsWith(".") && mSrc.length() > 1) {
+            mSrc = mSrc.substring(1);
+        }
+
+        // Some MMSCs appear to have problems with filenames
+        // containing a space.  So just replace them with
+        // underscores in the name, which is typically not
+        // visible to the user anyway.
+        mSrc = mSrc.replace(' ', '_');
     }
 
     private void initFromContentUri(Context context, Uri uri) {
         Cursor c = SqliteWrapper.query(context, context.getContentResolver(),
                             uri, null, null, null, null);
 
+        mSrc = null;
         if (c == null) {
             throw new IllegalArgumentException(
                     "Query on " + uri + " returns null result.");
@@ -132,10 +138,34 @@ public class UriImage {
                         c.getColumnIndexOrThrow(Part.CONTENT_TYPE));
             } else {
                 filePath = uri.getPath();
-                mContentType = c.getString(
-                        c.getColumnIndexOrThrow(Images.Media.MIME_TYPE));
+                try {
+                    mContentType = c.getString(
+                            c.getColumnIndexOrThrow(Images.Media.MIME_TYPE)); // mime_type
+                } catch (IllegalArgumentException e) {
+                    mContentType = c.getString(c.getColumnIndexOrThrow("mimetype"));
+                }
+
+                // use the original filename if possible
+                int nameIndex = c.getColumnIndex(Images.Media.DISPLAY_NAME);
+                if (nameIndex != -1) {
+                    mSrc = c.getString(nameIndex);
+                    if (!TextUtils.isEmpty(mSrc)) {
+                        // Some MMSCs appear to have problems with filenames
+                        // containing a space.  So just replace them with
+                        // underscores in the name, which is typically not
+                        // visible to the user anyway.
+                        mSrc = mSrc.replace(' ', '_');
+                    } else {
+                        mSrc = null;
+                    }
+                }
             }
             mPath = filePath;
+            if (mSrc == null) {
+                buildSrcFromPath();
+            }
+        } catch (IllegalArgumentException e) {
+            Log.e(TAG, "initFromContentUri couldn't load image uri: " + uri, e);
         } finally {
             c.close();
         }
@@ -173,6 +203,10 @@ public class UriImage {
         return mSrc;
     }
 
+    public String getPath() {
+        return mPath;
+    }
+
     public int getWidth() {
         return mWidth;
     }
@@ -194,7 +228,8 @@ public class UriImage {
     public PduPart getResizedImageAsPart(int widthLimit, int heightLimit, int byteLimit) {
         PduPart part = new PduPart();
 
-        byte[] data = getResizedImageData(widthLimit, heightLimit, byteLimit);
+        byte[] data =  getResizedImageData(mWidth, mHeight,
+                widthLimit, heightLimit, byteLimit, mUri, mContext);
         if (data == null) {
             if (LOCAL_LOGV) {
                 Log.v(TAG, "Resize image failed.");
@@ -219,9 +254,10 @@ public class UriImage {
      * @param byteLimit The binary size limit, in bytes
      * @return A resized/recompressed version of this image, in JPEG format
      */
-    private byte[] getResizedImageData(int widthLimit, int heightLimit, int byteLimit) {
-        int outWidth = mWidth;
-        int outHeight = mHeight;
+    public static byte[] getResizedImageData(int width, int height,
+            int widthLimit, int heightLimit, int byteLimit, Uri uri, Context context) {
+        int outWidth = width;
+        int outHeight = height;
 
         float scaleFactor = 1.F;
         while ((outWidth * scaleFactor > widthLimit) || (outHeight * scaleFactor > heightLimit)) {
@@ -229,11 +265,11 @@ public class UriImage {
         }
 
         if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
-            Log.v(TAG, "getResizedImageData: wlimit=" + widthLimit +
+            Log.v(TAG, "getResizedBitmap: wlimit=" + widthLimit +
                     ", hlimit=" + heightLimit + ", sizeLimit=" + byteLimit +
-                    ", mWidth=" + mWidth + ", mHeight=" + mHeight +
+                    ", width=" + width + ", height=" + height +
                     ", initialScaleFactor=" + scaleFactor +
-                    ", mUri=" + mUri);
+                    ", uri=" + uri);
         }
 
         InputStream input = null;
@@ -249,12 +285,16 @@ public class UriImage {
             // start with 1, which means no subsampling - get the original content) without running
             // out of memory.
             do {
-                input = mContext.getContentResolver().openInputStream(mUri);
+                input = context.getContentResolver().openInputStream(uri);
                 options.inSampleSize = sampleSize;
                 try {
                     b = BitmapFactory.decodeStream(input, null, options);
+                    if (b == null) {
+                        return null;    // Couldn't decode and it wasn't because of an exception,
+                                        // bail.
+                    }
                 } catch (OutOfMemoryError e) {
-                    Log.w(TAG, "getResizedImageData: img too large to decode (OutOfMemoryError), " +
+                    Log.w(TAG, "getResizedBitmap: img too large to decode (OutOfMemoryError), " +
                             "may try with larger sampleSize. Curr sampleSize=" + sampleSize);
                     sampleSize *= 2;    // works best as a power of two
                     attempts++;
@@ -271,9 +311,14 @@ public class UriImage {
             } while (b == null && attempts < NUMBER_OF_RESIZE_ATTEMPTS);
 
             if (b == null) {
+                if (Log.isLoggable(LogTag.APP, Log.VERBOSE)
+                        && attempts >= NUMBER_OF_RESIZE_ATTEMPTS) {
+                    Log.v(TAG, "getResizedImageData: gave up after too many attempts to resize");
+                }
                 return null;
             }
 
+            boolean resultTooBig = true;
             attempts = 1;   // reset count for second loop
             // In this loop, we attempt to compress/resize the content to fit the given dimension
             // and file-size limits.
@@ -294,6 +339,9 @@ public class UriImage {
 
                         b = Bitmap.createScaledBitmap(b, scaledWidth, scaledHeight, false);
                         if (b == null) {
+                            if (Log.isLoggable(LogTag.APP, Log.VERBOSE)) {
+                                Log.v(TAG, "Bitmap.createScaledBitmap returned NULL!");
+                            }
                             return null;
                         }
                     }
@@ -332,10 +380,15 @@ public class UriImage {
                 }
                 scaleFactor *= .75F;
                 attempts++;
-            } while ((os == null || os.size() > byteLimit) && attempts < NUMBER_OF_RESIZE_ATTEMPTS);
+                resultTooBig = os == null || os.size() > byteLimit;
+            } while (resultTooBig && attempts < NUMBER_OF_RESIZE_ATTEMPTS);
             b.recycle();        // done with the bitmap, release the memory
+            if (Log.isLoggable(LogTag.APP, Log.VERBOSE) && resultTooBig) {
+                Log.v(TAG, "getResizedImageData returning NULL because the result is too big: " +
+                        " requested max: " + byteLimit + " actual: " + os.size());
+            }
 
-            return os == null ? null : os.toByteArray();
+            return resultTooBig ? null : os.toByteArray();
         } catch (FileNotFoundException e) {
             Log.e(TAG, e.getMessage(), e);
             return null;
